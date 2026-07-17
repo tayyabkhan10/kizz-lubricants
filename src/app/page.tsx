@@ -73,10 +73,15 @@ export default function LoginPage() {
         <section className="flex items-center justify-center px-6 py-16">
           <div className="w-full max-w-[400px]">
             <div className="lg:hidden rise mb-8 flex items-center gap-2.5">
-              <span className="grid place-items-center w-9 h-9 rounded-[10px] bg-accent text-white font-semibold shadow-accent-glow">
-                K
-              </span>
-              <span className="text-[15px] font-semibold tracking-tight">Kizz Lubricants</span>
+              <Image
+                src="/logo.png"
+                alt="Kizz Lubricants"
+                width={54}
+                height={54}
+                priority
+                className="flex-shrink-0 w-[54px] h-[54px] rounded-lg object-contain"
+              />
+              <span className="text-[20px] font-semibold tracking-tight">Kizz Lubricants</span>
             </div>
             <div className="rise card shadow-pop p-8 sm:p-10">
               <p className="eyebrow">Admin access</p>
