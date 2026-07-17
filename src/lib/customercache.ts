@@ -3,6 +3,8 @@ import { createLocalCache } from "@/lib/localCache";
 
 export type FullCustomer = Customer & { entries: CustomerEntry[] };
 export type CustomerWithBalance = Customer & { balance?: number };
+/** A cached page of customers plus the total matching count. */
+export type CustomerListPage = { rows: CustomerWithBalance[]; count: number };
 
 /**
  * Map-like facade over the shared localStorage cache so the customer pages
@@ -21,4 +23,4 @@ function mapLikeCache<T>(namespace: string) {
 }
 
 export const customerDetailCache = mapLikeCache<FullCustomer>("customer-detail");
-export const customerListCache = mapLikeCache<CustomerWithBalance[]>("customer-list");
+export const customerListCache = mapLikeCache<CustomerListPage>("customer-list");

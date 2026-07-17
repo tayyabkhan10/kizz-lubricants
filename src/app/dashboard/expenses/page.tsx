@@ -4,17 +4,29 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { api } from "@/lib/api";
 import { formatMoney, fmtDate } from "@/lib/utils";
 import { getCache, setCache, clearCache } from "@/lib/expenses-cache";
-import { Plus, Search, Fuel, Trash2, X, Pencil, Check } from "lucide-react";
+import { Plus, Receipt, Trash2, X, Pencil, Check } from "lucide-react";
 import { useToast } from "@/components/toast";
 import { useConfirm } from "@/components/confirm";
+import { Pagination } from "@/components/pagination";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/states";
+import { SortHeader, type Sort, nextSort } from "@/components/sort-header";
+import { SearchInput } from "@/components/search-input";
 
 type Row = { id: number; date: string; detail: string; amount: string };
-type ListResponse = { rows: Row[]; total: number };
+type ListResponse = { rows: Row[]; total: number; count: number };
+
+const PAGE_SIZE = 50;
+const keyFor = (q: string, s: Sort, p: number) => `${q || "__all__"}|${s.col}|${s.dir}|p${p}`;
 
 export default function ExpensesPage() {
+  const initSort: Sort = { col: "date", dir: "desc" };
   const [rows, setRows] = useState<Row[]>([]);
   const [total, setTotal] = useState(0);
+  const [count, setCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<Sort>(initSort);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -30,37 +42,35 @@ export default function ExpensesPage() {
   const confirm = useConfirm();
 
   // ── Load with 5-min stale-while-revalidate cache ───────
-  const load = useCallback(async (q = "") => {
-    const cacheKey = q || "__all__";
-    const cached = getCache<ListResponse>(cacheKey);
-
+  const load = useCallback(async (q: string, p: number, s: Sort, opts?: { silent?: boolean }) => {
+    const cached = getCache<ListResponse>(keyFor(q, s, p));
     if (cached) {
-      // Instant paint from cache, no spinner, no flash
-      setRows(cached.rows);
-      setTotal(cached.total);
+      setRows(cached.rows); setTotal(cached.total); setCount(cached.count);
       setLoading(false);
-    } else {
+    } else if (!opts?.silent) {
       setLoading(true);
     }
-
+    if (!opts?.silent) setError(false);
     try {
-      const data = await api.get<ListResponse>(`/expenses${q ? `?search=${encodeURIComponent(q)}` : ""}`);
-      setRows(data.rows);
-      setTotal(data.total);
-      setCache(cacheKey, data);
+      const data = await api.get<ListResponse>(`/expenses?search=${encodeURIComponent(q)}&page=${p}&limit=${PAGE_SIZE}&sort=${s.col}&dir=${s.dir}`);
+      setRows(data.rows); setTotal(data.total); setCount(data.count);
+      setCache(keyFor(q, s, p), data);
+    } catch {
+      if (!cached && !opts?.silent) setError(true);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load("", 1, initSort); }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Debounced search so we don't hammer the API/cache on every keystroke
   const onSearchChange = (value: string) => {
-    setSearch(value);
+    setSearch(value); setPage(1);
     if (searchDebounce.current) clearTimeout(searchDebounce.current);
-    searchDebounce.current = setTimeout(() => load(value), 250);
+    searchDebounce.current = setTimeout(() => load(value, 1, sort), 250);
   };
+  const onSort = (col: string) => { const s = nextSort(sort, col); setSort(s); setPage(1); load(search, 1, s); };
+  const goPage = (p: number) => { setPage(p); load(search, p, sort); };
 
   const handleSave = async () => {
     if (!form.date || !form.detail || !form.amount) return;
@@ -70,7 +80,8 @@ export default function ExpensesPage() {
       setForm({ date: new Date().toISOString().slice(0, 10), detail: "", amount: "" });
       setShowForm(false);
       clearCache();
-      load(search);
+      setPage(1);
+      load(search, 1, sort);
       toast.success("Expense added");
     } catch {
       toast.error("Couldn't add expense");
@@ -84,16 +95,20 @@ export default function ExpensesPage() {
     // Optimistic UI: remove instantly, roll back on failure
     const prevRows = rows;
     const prevTotal = total;
+    const prevCount = count;
     const deleted = rows.find((r) => r.id === id);
     setRows((r) => r.filter((row) => row.id !== id));
     if (deleted) setTotal((t) => t - Number(deleted.amount));
+    setCount((c) => Math.max(0, c - 1));
     try {
       await api.del(`/expenses/${id}`);
       clearCache();
+      load(search, page, sort, { silent: true });
       toast.success("Expense deleted");
     } catch {
       setRows(prevRows);
       setTotal(prevTotal);
+      setCount(prevCount);
       toast.error("Couldn't delete expense");
     }
   };
@@ -121,7 +136,7 @@ export default function ExpensesPage() {
       await api.patch(`/expenses/${id}`, { ...editForm, amount: Number(editForm.amount) });
       clearCache();
       cancelEdit();
-      load(search); // reconcile total + ordering from server
+      load(search, page, sort, { silent: true }); // reconcile total + ordering from server
       toast.success("Expense updated");
     } catch {
       setRows(prevRows); // rollback on failure
@@ -131,27 +146,22 @@ export default function ExpensesPage() {
     }
   };
 
-  const average = useMemo(() => (rows.length ? total / rows.length : 0), [rows, total]);
+  // Average is over the whole (filtered) dataset, not just the current page.
+  const average = useMemo(() => (count ? total / count : 0), [count, total]);
 
   return (
     <div className="space-y-6 pb-10">
       {/* ── Header ─────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <div className="flex items-center gap-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#D97706] font-mono">
-              Ledger · 04 / 06
-            </p>
+          <p className="eyebrow">Costs</p>
+          <div className="mt-1.5 flex items-center gap-2.5">
+            <h1 className="text-[26px] font-semibold text-ink">Expenses</h1>
+            {count > 0 && <span className="badge-neutral tabular-nums">{count.toLocaleString()}</span>}
           </div>
-          <h1 className="mt-1 text-2xl sm:text-3xl font-display font-bold uppercase tracking-wide text-[#0B0D12]">
-            Expenses
-          </h1>
-          <p className="mt-1 text-sm text-black/55">Plant rent, petrol, repairs and other running costs.</p>
+          <p className="mt-1 text-sm text-muted">Plant rent, petrol, repairs and other running costs.</p>
         </div>
-        <button
-          onClick={() => setShowForm((s) => !s)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#0B0D12] text-white text-sm font-semibold rounded-xl hover:bg-black active:scale-[0.98] transition-all shadow-[0_6px_18px_-6px_rgba(217,119,6,0.4)]"
-        >
+        <button onClick={() => setShowForm((s) => !s)} className="btn-primary">
           <Plus className="w-4 h-4" strokeWidth={2.5} />
           Add expense
         </button>
@@ -159,44 +169,34 @@ export default function ExpensesPage() {
 
       {/* ── Stat strip ─────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-[#1C1F27] via-[#101318] to-[#0B0D12] p-5 shadow-[0_16px_40px_-18px_rgba(0,0,0,0.55)]">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-[#D97706]/10 blur-2xl" />
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/55 font-mono">Total cost</p>
-          <p className="mt-2 text-2xl font-mono font-bold text-[#F59E0B] tabular-nums">{formatMoney(total)}</p>
-          <div className="mt-3 flex gap-[3px]">
-            {[...Array(24)].map((_, i) => (
-              <span key={i} className={`h-3 w-[2px] rounded-full ${i < 16 ? "bg-[#D97706]/70" : "bg-white/10"}`} />
-            ))}
-          </div>
+        <div className="card p-5">
+          <p className="eyebrow">Total cost</p>
+          <p className="mt-2.5 text-[26px] leading-none font-mono font-semibold text-ink tabular-nums">{formatMoney(total)}</p>
         </div>
-        <div className="rounded-2xl bg-white border border-black/[0.06] p-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-black/50 font-mono">Entries</p>
-          <p className="mt-2 text-2xl font-mono font-bold text-[#0B0D12] tabular-nums">{rows.length}</p>
-          <p className="mt-3 text-xs text-black/50">{search ? `matching "${search}"` : "all recorded so far"}</p>
+        <div className="card p-5">
+          <p className="eyebrow">Entries</p>
+          <p className="mt-2.5 text-[26px] leading-none font-mono font-semibold text-ink tabular-nums">{count.toLocaleString()}</p>
+          <p className="mt-2.5 text-xs text-muted">{search ? `matching "${search}"` : "all recorded so far"}</p>
         </div>
-        <div className="rounded-2xl bg-white border border-black/[0.06] p-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-black/50 font-mono">Average / entry</p>
-          <p className="mt-2 text-2xl font-mono font-bold text-[#0B0D12] tabular-nums">{formatMoney(average)}</p>
-          <p className="mt-3 text-xs text-black/50">based on current view</p>
+        <div className="card p-5">
+          <p className="eyebrow">Average / entry</p>
+          <p className="mt-2.5 text-[26px] leading-none font-mono font-semibold text-ink tabular-nums">{formatMoney(average)}</p>
+          <p className="mt-2.5 text-xs text-muted">{search ? "across matches" : "across all entries"}</p>
         </div>
       </div>
 
       {/* ── New entry form ─────────────────────────────────── */}
       <div
-        className={`transition-all duration-300 ease-out overflow-hidden ${
+        className={`transition-all duration-200 ease-out overflow-hidden ${
           showForm ? "max-h-[420px] opacity-100" : "max-h-0 opacity-0"
         }`}
       >
-        <div className="bg-amber-50/60 border border-amber-200/70 rounded-2xl p-5 sm:p-6">
+        <div className="card p-5 sm:p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="flex items-center gap-2 font-display font-semibold text-[#0B0D12] text-sm uppercase tracking-wide">
-              <Fuel className="w-4 h-4 text-[#D97706]" strokeWidth={2} />
-              New entry
-            </h3>
+            <h3 className="font-semibold text-ink text-sm">New entry</h3>
             <button
               onClick={() => setShowForm(false)}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-black/50 hover:text-black hover:bg-black/5"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-muted hover:text-ink hover:bg-black/5"
               aria-label="Close"
             >
               <X className="w-4 h-4" />
@@ -209,14 +209,12 @@ export default function ExpensesPage() {
               { key: "amount", label: "Amount (Rs) *", type: "number" },
             ].map(({ key, label, type }) => (
               <div key={key}>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-black/55 mb-1.5">
-                  {label}
-                </label>
+                <label className="label">{label}</label>
                 <input
                   type={type}
                   value={(form as Record<string, string>)[key]}
                   onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                  className="w-full px-3 py-2.5 rounded-lg border border-black/10 text-sm bg-white focus:border-[#D97706] focus:ring-2 focus:ring-[#D97706]/15 outline-none transition-shadow"
+                  className="input py-2.5 text-sm"
                 />
               </div>
             ))}
@@ -225,14 +223,11 @@ export default function ExpensesPage() {
             <button
               onClick={handleSave}
               disabled={saving || !form.detail || !form.amount}
-              className="px-5 py-2.5 bg-[#0B0D12] text-white text-sm font-semibold rounded-xl disabled:opacity-40 disabled:cursor-not-allowed hover:bg-black active:scale-[0.98] transition-all"
+              className="btn-primary"
             >
               {saving ? "Saving…" : "Save entry"}
             </button>
-            <button
-              onClick={() => setShowForm(false)}
-              className="px-5 py-2.5 border border-black/10 text-black/60 text-sm font-semibold rounded-xl hover:bg-black/[0.03] transition-colors"
-            >
+            <button onClick={() => setShowForm(false)} className="btn-secondary">
               Cancel
             </button>
           </div>
@@ -240,49 +235,30 @@ export default function ExpensesPage() {
       </div>
 
       {/* ── Search ─────────────────────────────────────────── */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-black/25" strokeWidth={2} />
-        <input
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search expenses…"
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-black/10 text-sm bg-white focus:border-[#D97706] focus:ring-2 focus:ring-[#D97706]/15 outline-none transition-shadow"
-        />
-      </div>
+      <SearchInput value={search} onChange={onSearchChange} placeholder="Search expenses…" className="max-w-sm" />
 
       {/* ── Desktop / tablet table ─────────────────────────── */}
-      <div className="hidden sm:block bg-white rounded-2xl border border-black/[0.06] shadow-[0_1px_2px_rgba(0,0,0,0.04)] overflow-hidden">
+      <div className="hidden sm:block card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gradient-to-r from-[#1C1F27] via-[#101318] to-[#0B0D12] text-white">
-                {["Date", "Detail", "Amount", ""].map((h) => (
-                  <th
-                    key={h}
-                    className={`py-3 px-4 text-[11px] font-semibold uppercase tracking-wider ${
-                      h === "Amount" ? "text-right" : "text-left"
-                    }`}
-                  >
-                    {h}
-                  </th>
-                ))}
+              <tr className="bg-black/[0.02] border-b border-line">
+                <SortHeader col="date" label="Date" sort={sort} onSort={onSort} />
+                <th className="th">Detail</th>
+                <SortHeader col="amount" label="Amount" sort={sort} onSort={onSort} align="right" />
+                <th className="th" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-black/[0.04]">
+            <tbody className="divide-y divide-line">
               {loading
-                ? [...Array(4)].map((_, i) => (
-                    <tr key={i}>
-                      <td colSpan={4} className="px-4 py-3">
-                        <div className="h-4 bg-black/[0.05] rounded animate-pulse" />
-                      </td>
-                    </tr>
-                  ))
+                ? <TableSkeleton rows={6} cols={4} />
+                : error
+                ? <tr><td colSpan={4}><ErrorState onRetry={() => load(search, page, sort)} compact /></td></tr>
                 : rows.length === 0
                 ? (
                   <tr>
-                    <td colSpan={4} className="px-6 py-14 text-center">
-                      <Fuel className="w-8 h-8 mx-auto text-black/15 mb-2" strokeWidth={1.5} />
-                      <p className="text-black/55 text-sm">No entries yet. Add your first expense above.</p>
+                    <td colSpan={4}>
+                      <EmptyState icon={Receipt} compact title={search ? "No matches" : "No entries yet"} description={search ? `Nothing matches “${search}”.` : "Add your first expense with the button above."} />
                     </td>
                   </tr>
                 )
@@ -297,7 +273,7 @@ export default function ExpensesPage() {
                               type="date"
                               value={editForm.date}
                               onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))}
-                              className="w-full px-2 py-1.5 rounded-lg border border-black/10 text-xs bg-white focus:border-[#D97706] outline-none"
+                              className="input px-2 py-1.5 text-xs"
                             />
                           </td>
                           <td className="px-4 py-2.5">
@@ -305,7 +281,7 @@ export default function ExpensesPage() {
                               type="text"
                               value={editForm.detail}
                               onChange={(e) => setEditForm((f) => ({ ...f, detail: e.target.value }))}
-                              className="w-full px-2 py-1.5 rounded-lg border border-black/10 text-sm bg-white focus:border-[#D97706] outline-none"
+                              className="input px-2 py-1.5 text-sm"
                             />
                           </td>
                           <td className="px-4 py-2.5">
@@ -313,7 +289,7 @@ export default function ExpensesPage() {
                               type="number"
                               value={editForm.amount}
                               onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))}
-                              className="w-full px-2 py-1.5 rounded-lg border border-black/10 text-sm bg-white text-right font-mono focus:border-[#D97706] outline-none"
+                              className="input px-2 py-1.5 text-sm text-right font-mono"
                             />
                           </td>
                           <td className="px-4 py-2.5">
@@ -321,14 +297,14 @@ export default function ExpensesPage() {
                               <button
                                 onClick={() => saveEdit(r.id)}
                                 disabled={editSaving}
-                                className="w-7 h-7 flex items-center justify-center rounded-lg text-emerald-600 hover:bg-emerald-50 disabled:opacity-40"
+                                className="w-7 h-7 flex items-center justify-center rounded-lg text-success hover:bg-success-tint disabled:opacity-40"
                                 aria-label="Save"
                               >
                                 <Check className="w-4 h-4" strokeWidth={2.5} />
                               </button>
                               <button
                                 onClick={cancelEdit}
-                                className="w-7 h-7 flex items-center justify-center rounded-lg text-black/55 hover:bg-black/5"
+                                className="w-7 h-7 flex items-center justify-center rounded-lg text-muted hover:bg-black/5"
                                 aria-label="Cancel"
                               >
                                 <X className="w-4 h-4" strokeWidth={2.5} />
@@ -338,23 +314,23 @@ export default function ExpensesPage() {
                         </>
                       ) : (
                         <>
-                          <td className="px-4 py-3.5 text-black/55 text-xs font-mono whitespace-nowrap">{fmtDate(r.date)}</td>
-                          <td className="px-4 py-3.5 text-black/80">{r.detail}</td>
-                          <td className="px-4 py-3.5 text-right font-mono font-semibold text-[#D97706] tabular-nums">
+                          <td className="px-4 py-3.5 text-muted text-xs font-mono whitespace-nowrap">{fmtDate(r.date)}</td>
+                          <td className="px-4 py-3.5 text-ink">{r.detail}</td>
+                          <td className="px-4 py-3.5 text-right font-mono font-semibold text-ink tabular-nums">
                             {formatMoney(r.amount)}
                           </td>
                           <td className="px-4 py-3.5 text-right">
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 onClick={() => startEdit(r)}
-                                className="w-7 h-7 flex items-center justify-center rounded-lg text-black/15 group-hover:text-black/55 hover:!text-[#D97706] transition-colors"
+                                className="w-7 h-7 flex items-center justify-center rounded-lg text-muted/40 group-hover:text-muted hover:!text-accent transition-colors"
                                 aria-label="Edit entry"
                               >
                                 <Pencil className="w-4 h-4" strokeWidth={2} />
                               </button>
                               <button
                                 onClick={() => handleDelete(r.id)}
-                                className="w-7 h-7 flex items-center justify-center rounded-lg text-black/15 group-hover:text-black/55 hover:!text-rose-500 transition-colors"
+                                className="w-7 h-7 flex items-center justify-center rounded-lg text-muted/40 group-hover:text-muted hover:!text-danger transition-colors"
                                 aria-label="Delete entry"
                               >
                                 <Trash2 className="w-4 h-4" strokeWidth={2} />
@@ -369,11 +345,11 @@ export default function ExpensesPage() {
             </tbody>
             {rows.length > 0 && (
               <tfoot>
-                <tr className="border-t-2 border-black/[0.06] bg-black/[0.015]">
-                  <td colSpan={2} className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider text-black/55">
-                    Total
+                <tr className="border-t border-line bg-black/[0.02]">
+                  <td colSpan={2} className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                    {search ? "Total (filtered)" : "Total"}
                   </td>
-                  <td className="px-4 py-3.5 text-right font-mono font-bold text-[#D97706] tabular-nums">
+                  <td className="px-4 py-3.5 text-right font-mono font-semibold text-ink tabular-nums">
                     {formatMoney(total)}
                   </td>
                   <td />
@@ -382,56 +358,55 @@ export default function ExpensesPage() {
             )}
           </table>
         </div>
+        {!loading && !error && <Pagination page={page} total={count} pageSize={PAGE_SIZE} onPage={goPage} />}
       </div>
 
       {/* ── Mobile card list ───────────────────────────────── */}
       <div className="sm:hidden space-y-2.5">
         {loading
-          ? [...Array(3)].map((_, i) => (
-              <div key={i} className="h-16 bg-white rounded-2xl border border-black/[0.06] animate-pulse" />
+          ? [...Array(4)].map((_, i) => (
+              <div key={i} className="h-16 card animate-pulse" />
             ))
+          : error
+          ? <div className="card"><ErrorState onRetry={() => load(search, page, sort)} compact /></div>
           : rows.length === 0
           ? (
-            <div className="bg-white rounded-2xl border border-black/[0.06] px-6 py-12 text-center">
-              <Fuel className="w-8 h-8 mx-auto text-black/15 mb-2" strokeWidth={1.5} />
-              <p className="text-black/55 text-sm">No entries yet.</p>
+            <div className="card">
+              <EmptyState icon={Receipt} compact title={search ? "No matches" : "No entries yet"} description={search ? `Nothing matches “${search}”.` : "Add your first expense with the button above."} />
             </div>
           )
           : rows.map((r) => {
             const isEditing = editingId === r.id;
             if (isEditing) {
               return (
-                <div key={r.id} className="bg-amber-50/60 border border-amber-200/70 rounded-2xl px-4 py-3.5 space-y-2">
+                <div key={r.id} className="card px-4 py-3.5 space-y-2 ring-1 ring-accent/30">
                   <input
                     type="date"
                     value={editForm.date}
                     onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))}
-                    className="w-full px-2.5 py-2 rounded-lg border border-black/10 text-xs bg-white focus:border-[#D97706] outline-none"
+                    className="input px-2.5 py-2 text-xs"
                   />
                   <input
                     type="text"
                     value={editForm.detail}
                     onChange={(e) => setEditForm((f) => ({ ...f, detail: e.target.value }))}
-                    className="w-full px-2.5 py-2 rounded-lg border border-black/10 text-sm bg-white focus:border-[#D97706] outline-none"
+                    className="input px-2.5 py-2 text-sm"
                   />
                   <input
                     type="number"
                     value={editForm.amount}
                     onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))}
-                    className="w-full px-2.5 py-2 rounded-lg border border-black/10 text-sm bg-white font-mono focus:border-[#D97706] outline-none"
+                    className="input px-2.5 py-2 text-sm font-mono"
                   />
                   <div className="flex gap-2 pt-1">
                     <button
                       onClick={() => saveEdit(r.id)}
                       disabled={editSaving}
-                      className="flex-1 px-3 py-2 bg-[#0B0D12] text-white text-xs font-semibold rounded-lg disabled:opacity-40"
+                      className="btn-primary flex-1 py-2 text-xs"
                     >
                       {editSaving ? "Saving…" : "Save"}
                     </button>
-                    <button
-                      onClick={cancelEdit}
-                      className="flex-1 px-3 py-2 border border-black/10 text-black/60 text-xs font-semibold rounded-lg"
-                    >
+                    <button onClick={cancelEdit} className="btn-secondary flex-1 py-2 text-xs">
                       Cancel
                     </button>
                   </div>
@@ -441,25 +416,25 @@ export default function ExpensesPage() {
             return (
               <div
                 key={r.id}
-                className="flex items-center gap-3 bg-white rounded-2xl border border-black/[0.06] px-4 py-3.5 active:bg-black/[0.02]"
+                className="flex items-center gap-3 card px-4 py-3.5 active:bg-black/[0.02]"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-black/85 text-sm truncate">{r.detail}</p>
-                  <p className="text-black/50 text-[11px] font-mono mt-0.5">{fmtDate(r.date)}</p>
+                  <p className="text-ink text-sm truncate">{r.detail}</p>
+                  <p className="text-muted text-[11px] font-mono mt-0.5">{fmtDate(r.date)}</p>
                 </div>
-                <p className="font-mono font-semibold text-[#D97706] text-sm tabular-nums flex-shrink-0">
+                <p className="font-mono font-semibold text-ink text-sm tabular-nums flex-shrink-0">
                   {formatMoney(r.amount)}
                 </p>
                 <button
                   onClick={() => startEdit(r)}
-                  className="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-lg text-black/20 active:text-[#D97706] active:bg-amber-50"
+                  className="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-lg text-muted/40 active:text-accent active:bg-accent-tint"
                   aria-label="Edit entry"
                 >
                   <Pencil className="w-4 h-4" strokeWidth={2} />
                 </button>
                 <button
                   onClick={() => handleDelete(r.id)}
-                  className="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-lg text-black/20 active:text-rose-500 active:bg-rose-50"
+                  className="w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-lg text-muted/40 active:text-danger active:bg-danger-tint"
                   aria-label="Delete entry"
                 >
                   <Trash2 className="w-4 h-4" strokeWidth={2} />
@@ -469,9 +444,14 @@ export default function ExpensesPage() {
           })}
 
         {rows.length > 0 && (
-          <div className="flex items-center justify-between px-4 py-3.5 rounded-2xl bg-gradient-to-r from-[#1C1F27] to-[#0B0D12]">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">Total</p>
-            <p className="font-mono font-bold text-[#F59E0B] tabular-nums">{formatMoney(total)}</p>
+          <div className="flex items-center justify-between px-4 py-3.5 rounded-2xl bg-black/[0.03] border border-line">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">{search ? "Total (filtered)" : "Total"}</p>
+            <p className="font-mono font-semibold text-ink tabular-nums">{formatMoney(total)}</p>
+          </div>
+        )}
+        {!loading && !error && count > PAGE_SIZE && (
+          <div className="card">
+            <Pagination page={page} total={count} pageSize={PAGE_SIZE} onPage={goPage} />
           </div>
         )}
       </div>

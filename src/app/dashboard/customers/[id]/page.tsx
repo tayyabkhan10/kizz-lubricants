@@ -7,10 +7,13 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { formatMoney, toNum, fmtDate } from "@/lib/utils";
 import type { CustomerEntry } from "@/db/schema";
-import { FileSpreadsheet, MessageCircle } from "lucide-react";
+import { FileSpreadsheet, MessageCircle, ReceiptText } from "lucide-react";
 import { customerDetailCache as customerCache, type FullCustomer } from "@/lib/customercache";
 import { useToast } from "@/components/toast";
 import { useConfirm } from "@/components/confirm";
+import { EmptyState, ErrorState } from "@/components/states";
+
+const VISIBLE_LIMIT = 100; // progressively reveal older rows beyond this
 
 export default function CustomerLedgerPage() {
   const { id } = useParams<{ id: string }>();
@@ -37,16 +40,20 @@ export default function CustomerLedgerPage() {
   const [editSaving, setEditSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [error, setError] = useState(false);
+  const [showAll, setShowAll] = useState(false); // progressive render for long ledgers
   const toast = useToast();
   const confirm = useConfirm();
 
   const load = useCallback(
     async (opts?: { silent?: boolean }) => {
-      if (!opts?.silent) setLoading(true);
+      if (!opts?.silent) { setLoading(true); setError(false); }
       try {
         const data = await api.get<FullCustomer>(`/customers/${id}`);
         customerCache.set(id, data);
         setCustomer(data);
+      } catch {
+        if (!opts?.silent) setError(true);
       } finally {
         if (!opts?.silent) setLoading(false);
       }
@@ -228,86 +235,96 @@ export default function CustomerLedgerPage() {
 
   if (loading) return (
     <div className="space-y-4">
-      <div className="h-5 w-40 bg-gray-100 rounded animate-pulse" />
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="h-2 bg-gray-100 animate-pulse" />
+      <div className="h-5 w-40 bg-black/[0.04] rounded animate-pulse" />
+      <div className="card overflow-hidden">
         <div className="p-6 space-y-4">
-          <div className="h-6 w-56 bg-gray-100 rounded animate-pulse" />
-          <div className="h-4 w-3/4 bg-gray-100 rounded animate-pulse" />
-          <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
-            {[...Array(3)].map((_, i) => <div key={i} className="h-10 bg-gray-100 rounded animate-pulse" />)}
+          <div className="h-6 w-56 bg-black/[0.04] rounded animate-pulse" />
+          <div className="h-4 w-3/4 bg-black/[0.04] rounded animate-pulse" />
+          <div className="grid grid-cols-3 gap-4 pt-4 border-t border-line">
+            {[...Array(3)].map((_, i) => <div key={i} className="h-10 bg-black/[0.04] rounded animate-pulse" />)}
           </div>
         </div>
       </div>
-      <div className="h-64 bg-gray-100 rounded-2xl animate-pulse" />
+      <div className="h-64 bg-black/[0.04] rounded-2xl animate-pulse" />
     </div>
   );
 
-  if (!customer) return <div className="text-gray-500 text-sm">Customer not found.</div>;
+  if (error && !customer) return (
+    <div className="space-y-4">
+      <Link href="/dashboard/customers" className="text-sm text-muted hover:text-accent transition-colors">← Customers</Link>
+      <div className="card"><ErrorState message="Couldn't load this customer's ledger." onRetry={() => load()} /></div>
+    </div>
+  );
+
+  if (!customer) return (
+    <div className="card"><EmptyState title="Customer not found" description="This customer may have been removed." action={<Link href="/dashboard/customers" className="btn-secondary">← Back to customers</Link>} /></div>
+  );
 
   const entries = customer.entries ?? [];
   const lastEntry = entries[entries.length - 1];
   const currentBalance = lastEntry ? toNum(lastEntry.balance) : 0;
   const totalDebit = entries.reduce((a, e) => a + toNum(e.debit), 0);
   const totalCredit = entries.reduce((a, e) => a + toNum(e.credit), 0);
+  // Keep the DOM light on long statements — show the most recent rows, reveal older on demand.
+  const hidden = !showAll && entries.length > VISIBLE_LIMIT ? entries.length - VISIBLE_LIMIT : 0;
+  const visibleEntries = hidden ? entries.slice(-VISIBLE_LIMIT) : entries;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Link href="/dashboard/customers" className="hover:text-amber-600 transition-colors">Customers</Link>
+      <div className="flex items-center gap-2 text-sm text-muted">
+        <Link href="/dashboard/customers" className="hover:text-accent transition-colors">Customers</Link>
         <span>/</span>
-        <span className="text-gray-700 font-medium">{customer.name}</span>
+        <span className="text-ink font-medium">{customer.name}</span>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="h-2 bg-gradient-to-r from-amber-400 to-amber-600" />
+      <div className="card overflow-hidden">
         <div className="p-6">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <h1 className="text-xl font-display font-bold uppercase tracking-wide text-gray-900">{customer.name}</h1>
-              <div className="flex flex-wrap gap-4 mt-2 text-sm text-gray-500">
-                {customer.owner && <span><b className="text-gray-600">Owner:</b> {customer.owner}</span>}
-                {customer.cnic && <span><b className="text-gray-600">CNIC:</b> {customer.cnic}</span>}
-                {customer.address && <span><b className="text-gray-600">Address:</b> {customer.address}</span>}
-                {customer.phone && <span><b className="text-gray-600">Phone:</b> {customer.phone}</span>}
-                {customer.whatsapp && <span><b className="text-gray-600">WhatsApp:</b> {customer.whatsapp}</span>}
+              <h1 className="text-xl font-semibold tracking-tight text-ink">{customer.name}</h1>
+              <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted">
+                {customer.owner && <span><b className="text-ink font-medium">Owner:</b> {customer.owner}</span>}
+                {customer.cnic && <span><b className="text-ink font-medium">CNIC:</b> {customer.cnic}</span>}
+                {customer.address && <span><b className="text-ink font-medium">Address:</b> {customer.address}</span>}
+                {customer.phone && <span><b className="text-ink font-medium">Phone:</b> {customer.phone}</span>}
+                {customer.whatsapp && <span><b className="text-ink font-medium">WhatsApp:</b> {customer.whatsapp}</span>}
               </div>
             </div>
             <div className="text-right">
-              <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Current Balance</p>
-              <p className={`font-mono text-2xl font-bold mt-0.5 ${currentBalance > 0 ? "text-amber-600" : currentBalance < 0 ? "text-emerald-600" : "text-gray-500"}`}>
+              <p className="text-[11px] uppercase tracking-wider text-muted font-semibold">Current Balance</p>
+              <p className={`font-mono text-2xl font-semibold mt-0.5 tabular-nums ${currentBalance > 0 ? "text-warning" : currentBalance < 0 ? "text-success" : "text-muted"}`}>
                 {formatMoney(currentBalance)}
               </p>
-              <p className="text-xs text-gray-500 mt-0.5">
+              <p className="text-xs text-muted mt-0.5">
                 {currentBalance > 0 ? "Customer owes" : currentBalance < 0 ? "Advance paid" : "Settled"}
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-100">
+          <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-line">
             <div>
-              <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Total Debit</p>
-              <p className="font-mono font-semibold text-amber-600 mt-1">{formatMoney(totalDebit)}</p>
+              <p className="text-[11px] uppercase tracking-wider text-muted font-semibold">Total Debit</p>
+              <p className="font-mono font-semibold text-warning mt-1 tabular-nums">{formatMoney(totalDebit)}</p>
             </div>
             <div>
-              <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Total Credit</p>
-              <p className="font-mono font-semibold text-emerald-600 mt-1">{formatMoney(totalCredit)}</p>
+              <p className="text-[11px] uppercase tracking-wider text-muted font-semibold">Total Credit</p>
+              <p className="font-mono font-semibold text-success mt-1 tabular-nums">{formatMoney(totalCredit)}</p>
             </div>
             <div>
-              <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Transactions</p>
-              <p className="font-mono font-semibold text-gray-700 mt-1">{entries.length}</p>
+              <p className="text-[11px] uppercase tracking-wider text-muted font-semibold">Transactions</p>
+              <p className="font-mono font-semibold text-ink mt-1 tabular-nums">{entries.length}</p>
             </div>
           </div>
         </div>
       </div>
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <h2 className="font-display font-semibold uppercase tracking-wide text-gray-700">Ledger</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-ink">Ledger</h2>
         <div className="flex gap-3 flex-wrap">
           <button
             onClick={exportLedger}
             disabled={entries.length === 0 || exporting}
-            className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="btn-secondary"
           >
             <FileSpreadsheet className="w-4 h-4" strokeWidth={2} />
             {exporting ? "Preparing…" : "Export Excel"}
@@ -315,23 +332,20 @@ export default function CustomerLedgerPage() {
           <button
             onClick={shareOnWhatsApp}
             disabled={entries.length === 0 || sharing}
-            className="inline-flex items-center gap-2 px-4 py-2.5 border border-emerald-200 text-emerald-700 text-sm font-semibold rounded-xl hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="btn inline-flex items-center gap-2 border border-success/30 text-success hover:bg-success-tint"
           >
             <MessageCircle className="w-4 h-4" strokeWidth={2} />
             {sharing ? "Sending…" : "WhatsApp"}
           </button>
-          <button
-            onClick={() => setShowForm((s) => !s)}
-            className="px-4 py-2.5 bg-[#111318] text-white text-sm font-semibold rounded-xl hover:bg-black transition-colors"
-          >
+          <button onClick={() => setShowForm((s) => !s)} className="btn-primary">
             + Add Entry
           </button>
         </div>
       </div>
 
       {showForm && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6">
-          <h3 className="font-semibold text-gray-800 mb-4">New Ledger Entry</h3>
+        <div className="card p-6">
+          <h3 className="font-semibold text-ink mb-4">New Ledger Entry</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {[
               { key: "date", label: "Date", type: "date" },
@@ -345,87 +359,96 @@ export default function CustomerLedgerPage() {
               { key: "account", label: "Account / Note", type: "text" },
             ].map(({ key, label, type }) => (
               <div key={key}>
-                <label className="block text-[11px] font-semibold uppercase tracking-wider text-gray-500 mb-1.5">{label}</label>
+                <label className="label">{label}</label>
                 <input
                   type={type}
                   value={(form as Record<string, string>)[key]}
                   onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
                   onBlur={key === "rate" || key === "qty" ? handleAutoDebit : undefined}
-                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 text-sm bg-white focus:border-amber-400 outline-none"
+                  className="input py-2.5 text-sm"
                 />
               </div>
             ))}
           </div>
-          <p className="text-xs text-gray-500 mt-3">
+          <p className="text-xs text-muted mt-3">
             Tip: Enter Qty + Rate and click the Rate field — Debit auto-calculates.
           </p>
           <div className="flex gap-3 mt-4">
-            <button onClick={handleSave} disabled={saving} className="px-5 py-2.5 bg-[#111318] text-white text-sm font-semibold rounded-xl disabled:opacity-50">
+            <button onClick={handleSave} disabled={saving} className="btn-primary">
               {saving ? "Saving…" : "Save Entry"}
             </button>
-            <button onClick={() => setShowForm(false)} className="px-5 py-2.5 border border-gray-200 text-gray-600 text-sm font-semibold rounded-xl hover:bg-gray-50">
+            <button onClick={() => setShowForm(false)} className="btn-secondary">
               Cancel
             </button>
           </div>
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[900px]">
             <thead>
-              <tr className="bg-gradient-to-r from-[#1C1F27] via-[#101318] to-[#0B0D12] text-white">
+              <tr className="bg-black/[0.02] border-b border-line">
                 {["Date", "Product", "Packing", "Unit", "Qty", "Rate", "Debit", "Credit", "Balance", "Account / Note", ""].map((h) => (
-                  <th key={h} className={`py-3 px-4 text-[11px] font-semibold uppercase tracking-wider ${h === "Debit" || h === "Credit" || h === "Balance" || h === "Rate" ? "text-right" : "text-left"}`}>
+                  <th key={h} className={`th ${h === "Debit" || h === "Credit" || h === "Balance" || h === "Rate" ? "text-right" : "text-left"}`}>
                     {h}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-line">
               {entries.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-6 py-10 text-center text-gray-500 text-sm">
-                    No entries yet. Click <b>+ Add Entry</b> to record the first transaction.
+                  <td colSpan={11}>
+                    <EmptyState icon={ReceiptText} compact title="No entries yet" description="Use “+ Add Entry” to record this customer's first transaction." />
                   </td>
                 </tr>
               )}
-              {entries.map((e) => {
+              {hidden > 0 && (
+                <tr>
+                  <td colSpan={11} className="px-4 py-2.5 text-center bg-black/[0.015]">
+                    <button onClick={() => setShowAll(true)} className="text-[13px] font-medium text-accent-ink hover:text-accent-hover">
+                      Show {hidden.toLocaleString()} older {hidden === 1 ? "entry" : "entries"}
+                    </button>
+                  </td>
+                </tr>
+              )}
+              {visibleEntries.map((e) => {
                 if (editId === e.id) {
                   return (
-                    <tr key={e.id} className="bg-amber-50/40">
+                    <tr key={e.id} className="bg-accent-tint/40">
                       <td className="px-4 py-2">
-                        <input type="date" value={editForm.date} onChange={ev => setEditForm(f => ({ ...f, date: ev.target.value }))} className="w-full px-2 py-1.5 rounded-lg border border-amber-200 text-xs bg-white outline-none focus:border-amber-400" />
+                        <input type="date" value={editForm.date} onChange={ev => setEditForm(f => ({ ...f, date: ev.target.value }))} className="input px-2 py-1.5 text-xs" />
                       </td>
                       <td className="px-4 py-2">
-                        <input value={editForm.product} onChange={ev => setEditForm(f => ({ ...f, product: ev.target.value }))} className="w-full px-2 py-1.5 rounded-lg border border-amber-200 text-sm bg-white outline-none focus:border-amber-400" />
+                        <input value={editForm.product} onChange={ev => setEditForm(f => ({ ...f, product: ev.target.value }))} className="input px-2 py-1.5 text-sm" />
                       </td>
                       <td className="px-4 py-2">
-                        <input value={editForm.packing} onChange={ev => setEditForm(f => ({ ...f, packing: ev.target.value }))} className="w-full px-2 py-1.5 rounded-lg border border-amber-200 text-xs bg-white outline-none focus:border-amber-400" />
+                        <input value={editForm.packing} onChange={ev => setEditForm(f => ({ ...f, packing: ev.target.value }))} className="input px-2 py-1.5 text-xs" />
                       </td>
                       <td className="px-4 py-2">
-                        <input value={editForm.unit} onChange={ev => setEditForm(f => ({ ...f, unit: ev.target.value }))} className="w-full px-2 py-1.5 rounded-lg border border-amber-200 text-xs bg-white outline-none focus:border-amber-400" />
+                        <input value={editForm.unit} onChange={ev => setEditForm(f => ({ ...f, unit: ev.target.value }))} className="input px-2 py-1.5 text-xs" />
                       </td>
                       <td className="px-4 py-2">
-                        <input type="number" value={editForm.qty} onChange={ev => setEditForm(f => ({ ...f, qty: ev.target.value }))} onBlur={handleEditAutoDebit} className="w-full px-2 py-1.5 rounded-lg border border-amber-200 text-xs bg-white outline-none focus:border-amber-400" />
+                        <input type="number" value={editForm.qty} onChange={ev => setEditForm(f => ({ ...f, qty: ev.target.value }))} onBlur={handleEditAutoDebit} className="input px-2 py-1.5 text-xs" />
                       </td>
                       <td className="px-4 py-2">
-                        <input type="number" value={editForm.rate} onChange={ev => setEditForm(f => ({ ...f, rate: ev.target.value }))} onBlur={handleEditAutoDebit} className="w-full px-2 py-1.5 rounded-lg border border-amber-200 text-xs bg-white text-right font-mono outline-none focus:border-amber-400" />
+                        <input type="number" value={editForm.rate} onChange={ev => setEditForm(f => ({ ...f, rate: ev.target.value }))} onBlur={handleEditAutoDebit} className="input px-2 py-1.5 text-xs text-right font-mono" />
                       </td>
                       <td className="px-4 py-2">
-                        <input type="number" value={editForm.debit} onChange={ev => setEditForm(f => ({ ...f, debit: ev.target.value }))} className="w-full px-2 py-1.5 rounded-lg border border-amber-200 text-sm bg-white text-right font-mono outline-none focus:border-amber-400" />
+                        <input type="number" value={editForm.debit} onChange={ev => setEditForm(f => ({ ...f, debit: ev.target.value }))} className="input px-2 py-1.5 text-sm text-right font-mono" />
                       </td>
                       <td className="px-4 py-2">
-                        <input type="number" value={editForm.credit} onChange={ev => setEditForm(f => ({ ...f, credit: ev.target.value }))} className="w-full px-2 py-1.5 rounded-lg border border-amber-200 text-sm bg-white text-right font-mono outline-none focus:border-amber-400" />
+                        <input type="number" value={editForm.credit} onChange={ev => setEditForm(f => ({ ...f, credit: ev.target.value }))} className="input px-2 py-1.5 text-sm text-right font-mono" />
                       </td>
-                      <td className="px-4 py-2 text-center text-gray-300 text-xs">auto</td>
+                      <td className="px-4 py-2 text-center text-muted/50 text-xs">auto</td>
                       <td className="px-4 py-2">
-                        <input value={editForm.account} onChange={ev => setEditForm(f => ({ ...f, account: ev.target.value }))} className="w-full px-2 py-1.5 rounded-lg border border-amber-200 text-xs bg-white outline-none focus:border-amber-400" />
+                        <input value={editForm.account} onChange={ev => setEditForm(f => ({ ...f, account: ev.target.value }))} className="input px-2 py-1.5 text-xs" />
                       </td>
                       <td className="px-4 py-2 whitespace-nowrap">
                         <div className="flex items-center gap-4">
-                          <button onClick={() => saveEdit(e.id)} disabled={editSaving} className="text-emerald-600 font-bold disabled:opacity-40">✓</button>
-                          <button onClick={cancelEdit} className="text-gray-500">×</button>
+                          <button onClick={() => saveEdit(e.id)} disabled={editSaving} className="text-success font-semibold disabled:opacity-40">✓</button>
+                          <button onClick={cancelEdit} className="text-muted">×</button>
                         </div>
                       </td>
                     </tr>
@@ -436,23 +459,23 @@ export default function CustomerLedgerPage() {
                 const isDebitRow = toNum(e.debit) > 0;
                 const isCreditRow = toNum(e.credit) > 0 && !isDebitRow;
                 return (
-                  <tr key={e.id} className={`hover:bg-gray-50/50 transition-colors ${isCreditRow ? "bg-emerald-50/20" : ""}`}>
-                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{fmtDate(e.date)}</td>
-                    <td className="px-4 py-3 font-medium text-gray-800">{e.product || <span className="text-gray-300">—</span>}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{e.packing || "—"}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{e.unit || "—"}</td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{e.qty ? Number(e.qty).toLocaleString() : "—"}</td>
-                    <td className="px-4 py-3 text-right text-gray-500 text-xs font-mono">{e.rate ? formatMoney(e.rate) : "—"}</td>
-                    <td className="px-4 py-3 text-right font-mono text-amber-600 font-semibold">{toNum(e.debit) > 0 ? formatMoney(e.debit) : <span className="text-gray-200">—</span>}</td>
-                    <td className="px-4 py-3 text-right font-mono text-emerald-600 font-semibold">{toNum(e.credit) > 0 ? formatMoney(e.credit) : <span className="text-gray-200">—</span>}</td>
-                    <td className={`px-4 py-3 text-right font-mono font-bold text-[13px] ${bal > 0 ? "text-amber-600" : bal < 0 ? "text-emerald-600" : "text-gray-500"}`}>
+                  <tr key={e.id} className={`hover:bg-black/[0.015] transition-colors ${isCreditRow ? "bg-success-tint/40" : ""}`}>
+                    <td className="px-4 py-3 text-muted text-xs whitespace-nowrap">{fmtDate(e.date)}</td>
+                    <td className="px-4 py-3 font-medium text-ink">{e.product || <span className="text-muted/40">—</span>}</td>
+                    <td className="px-4 py-3 text-muted text-xs">{e.packing || "—"}</td>
+                    <td className="px-4 py-3 text-muted text-xs">{e.unit || "—"}</td>
+                    <td className="px-4 py-3 text-muted text-xs">{e.qty ? Number(e.qty).toLocaleString() : "—"}</td>
+                    <td className="px-4 py-3 text-right text-muted text-xs font-mono tabular-nums">{e.rate ? formatMoney(e.rate) : "—"}</td>
+                    <td className="px-4 py-3 text-right font-mono text-warning font-semibold tabular-nums">{toNum(e.debit) > 0 ? formatMoney(e.debit) : <span className="text-muted/30">—</span>}</td>
+                    <td className="px-4 py-3 text-right font-mono text-success font-semibold tabular-nums">{toNum(e.credit) > 0 ? formatMoney(e.credit) : <span className="text-muted/30">—</span>}</td>
+                    <td className={`px-4 py-3 text-right font-mono font-semibold text-[13px] tabular-nums ${bal > 0 ? "text-warning" : bal < 0 ? "text-success" : "text-muted"}`}>
                       {formatMoney(bal)}
                     </td>
-                    <td className="px-4 py-3 text-gray-500 text-xs max-w-[180px] truncate">{e.account || "—"}</td>
+                    <td className="px-4 py-3 text-muted text-xs max-w-[180px] truncate">{e.account || "—"}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-4">
-                        <button onClick={() => startEdit(e)} className="text-gray-300 hover:text-amber-600 transition-colors" title="Edit entry">✎</button>
-                        <button onClick={() => handleDelete(e.id)} className="text-gray-300 hover:text-rose-500 transition-colors text-lg leading-none" title="Delete entry">×</button>
+                        <button onClick={() => startEdit(e)} className="text-muted/50 hover:text-accent transition-colors" title="Edit entry">✎</button>
+                        <button onClick={() => handleDelete(e.id)} className="text-muted/50 hover:text-danger transition-colors text-lg leading-none" title="Delete entry">×</button>
                       </div>
                     </td>
                   </tr>
@@ -461,11 +484,11 @@ export default function CustomerLedgerPage() {
             </tbody>
             {entries.length > 0 && (
               <tfoot>
-                <tr className="border-t-2 border-gray-200 bg-gray-50">
-                  <td colSpan={6} className="px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">Totals</td>
-                  <td className="px-4 py-3 text-right font-mono font-bold text-amber-600">{formatMoney(totalDebit)}</td>
-                  <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">{formatMoney(totalCredit)}</td>
-                  <td className={`px-4 py-3 text-right font-mono font-bold text-[14px] ${currentBalance > 0 ? "text-amber-600" : currentBalance < 0 ? "text-emerald-600" : "text-gray-500"}`}>
+                <tr className="border-t border-line bg-black/[0.02]">
+                  <td colSpan={6} className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted">Totals</td>
+                  <td className="px-4 py-3 text-right font-mono font-semibold text-warning tabular-nums">{formatMoney(totalDebit)}</td>
+                  <td className="px-4 py-3 text-right font-mono font-semibold text-success tabular-nums">{formatMoney(totalCredit)}</td>
+                  <td className={`px-4 py-3 text-right font-mono font-semibold text-[14px] tabular-nums ${currentBalance > 0 ? "text-warning" : currentBalance < 0 ? "text-success" : "text-muted"}`}>
                     {formatMoney(currentBalance)}
                   </td>
                   <td colSpan={2} />

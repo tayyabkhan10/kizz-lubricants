@@ -1,11 +1,9 @@
-
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
-import Image from "next/image";
 import {
   LayoutGrid,
   Users,
@@ -27,6 +25,25 @@ const NAV = [
   { href: "/dashboard/pnl", label: "Profit & Loss", icon: BarChart3 },
 ];
 
+/** Minimal monogram + wordmark. No industrial/oil imagery. */
+function Brand() {
+  return (
+    <div className="flex items-center gap-2.5 select-none">
+      <span className="flex-shrink-0 grid place-items-center w-8 h-8 rounded-[9px] bg-accent text-white text-[15px] font-semibold shadow-accent-glow">
+        K
+      </span>
+      <span className="leading-tight">
+        <span className="block text-[13.5px] font-semibold tracking-tight text-ink">
+          Kizz Lubricants
+        </span>
+        <span className="block text-[10.5px] tracking-eyebrow uppercase text-faint">
+          Ledger
+        </span>
+      </span>
+    </div>
+  );
+}
+
 export default function Sidebar({ userEmail }: { userEmail: string }) {
   const path = usePathname();
 
@@ -35,61 +52,38 @@ export default function Sidebar({ userEmail }: { userEmail: string }) {
 
   return (
     <>
-      {/* ── Desktop sidebar (fixed left) ─────────────────────── */}
-      <aside className="hidden md:flex fixed inset-y-0 left-0 z-40 w-[248px] flex-col bg-white border-r border-black/[0.07]">
-        {/* Brand */}
-        <div className="px-5 pt-6 pb-5 border-b border-black/[0.07]">
-          <div className="flex items-center gap-3">
-            {/* Gauge-ring logo mark */}
-            <div className="relative w-24 h-24 flex-shrink-0">
-              <svg viewBox="0 0 40 40" className="absolute inset-0 w-full h-full -rotate-90">
-                <circle cx="20" cy="20" r="18" fill="none" stroke="#00000010" strokeWidth="1.5" />
-                <circle
-                  cx="20" cy="20" r="18" fill="none"
-                  stroke="#D97706" strokeWidth="1.5" strokeLinecap="round"
-                  strokeDasharray="113"
-                  strokeDashoffset="34"
-                />
-              </svg>
-              <a className="absolute inset-0 flex items-center justify-center select-none"
-                href="/">
-                <Image src="/logo.png" alt="Logo" width={60} height={60} className="object-contain" />
-              </a>
-            </div>
-            <div>
-              <p className="font-display font-bold text-[#0B0D12] text-[13px] tracking-wider uppercase leading-none">
-                Kizz Lubricants
-              </p>
-              <p className="text-[10px] text-black/55 mt-1 tracking-[0.2em] uppercase font-mono">
-                Lubricants Co.
-              </p>
-            </div>
-          </div>
+      {/* ── Desktop sidebar — soft slate panel ────────────────── */}
+      <aside className="hidden md:flex fixed inset-y-0 left-0 z-40 w-[248px] flex-col bg-panel border-r border-line-strong">
+        <div className="px-5 h-[68px] flex items-center border-b border-line-strong/70">
+          <Link href="/dashboard">
+            <Brand />
+          </Link>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 py-5 px-3 space-y-0.5 overflow-y-auto">
-          
+        <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+          <p className="px-3 pb-2 pt-1 eyebrow">Ledgers</p>
           {NAV.map(({ href, label, icon: Icon }) => {
             const active = isActive(href);
             return (
               <Link
                 key={href}
                 href={href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200",
+                  "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13.5px] font-medium transition-all duration-150",
                   active
-                    ? "bg-[#0B0D12] text-white shadow-[0_4px_14px_-4px_rgba(217,119,6,0.35)]"
-                    : "text-black/55 hover:text-black hover:bg-black/[0.04]"
+                    ? "bg-surface text-ink shadow-btn"
+                    : "text-muted hover:text-ink hover:bg-surface/60",
                 )}
               >
                 {active && (
-                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-full bg-[#D97706]" />
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-accent" />
                 )}
                 <Icon
                   className={cn(
-                    "w-4 h-4 flex-shrink-0 transition-colors",
-                    active ? "text-[#F59E0B]" : "text-black/50 group-hover:text-black/60"
+                    "w-[18px] h-[18px] flex-shrink-0 transition-colors",
+                    active ? "text-accent" : "text-faint group-hover:text-muted",
                   )}
                   strokeWidth={2}
                 />
@@ -100,49 +94,38 @@ export default function Sidebar({ userEmail }: { userEmail: string }) {
         </nav>
 
         {/* Footer */}
-        <div className="px-3 py-4 border-t border-black/[0.07]">
-          <div className="px-3 mb-3 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-            <p className="text-[11px] text-black/55 truncate font-mono">{userEmail}</p>
+        <div className="px-3 py-4 border-t border-line-strong/70">
+          <div className="px-3 mb-2.5 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-success flex-shrink-0 shadow-[0_0_0_3px_rgba(21,145,75,0.14)]" />
+            <p className="text-[11.5px] text-muted truncate">{userEmail}</p>
           </div>
           <button
             onClick={() => signOut({ callbackUrl: "/" })}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium text-black/55 hover:text-black hover:bg-black/[0.04] transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13.5px] font-medium text-muted hover:text-ink hover:bg-surface/60 transition-colors"
           >
-            <LogOut className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
+            <LogOut className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={2} />
             Sign out
           </button>
         </div>
       </aside>
 
       {/* ── Mobile top brand bar ──────────────────────────────── */}
-      <header className="md:hidden fixed top-0 inset-x-0 z-40 flex items-center justify-between px-4 h-14 bg-white/90 backdrop-blur-md border-b border-black/[0.07]">
-        <div className="flex items-center gap-2.5">
-          <div className="relative w-7 h-7 flex-shrink-0">
-            <svg viewBox="0 0 40 40" className="absolute inset-0 w-full h-full -rotate-90">
-              <circle cx="20" cy="20" r="18" fill="none" stroke="#00000010" strokeWidth="2" />
-              <circle cx="20" cy="20" r="18" fill="none" stroke="#D97706" strokeWidth="2" strokeLinecap="round" strokeDasharray="113" strokeDashoffset="34" />
-            </svg>
-            <div className="absolute inset-[4px] rounded-full bg-[#0B0D12] flex items-center justify-center">
-              <span className="font-bold text-white text-[8px]">NS</span>
-            </div>
-          </div>
-          <p className="font-display font-bold text-[#0B0D12] text-[12px] tracking-wider uppercase leading-none">
-            Kizz Lubricants
-          </p>
-        </div>
+      <header className="md:hidden fixed top-0 inset-x-0 z-40 flex items-center justify-between px-4 h-14 bg-surface/90 backdrop-blur-md border-b border-line">
+        <Link href="/dashboard">
+          <Brand />
+        </Link>
         <button
           onClick={() => signOut({ callbackUrl: "/" })}
           aria-label="Sign out"
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-black/55 active:bg-black/[0.06]"
+          className="w-9 h-9 flex items-center justify-center rounded-lg text-muted active:bg-black/[0.06]"
         >
           <LogOut className="w-[18px] h-[18px]" strokeWidth={2} />
         </button>
       </header>
 
-      {/* ── Mobile bottom bar (fixed, icons + floating active pill) ── */}
+      {/* ── Mobile bottom bar ─────────────────────────────────── */}
       <nav
-        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-white/95 backdrop-blur-md border-t border-black/[0.07]"
+        className="md:hidden fixed bottom-0 inset-x-0 z-50 bg-surface/95 backdrop-blur-md border-t border-line"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Main navigation"
       >
@@ -154,26 +137,27 @@ export default function Sidebar({ userEmail }: { userEmail: string }) {
                 key={href}
                 href={href}
                 aria-label={label}
+                aria-current={active ? "page" : undefined}
                 className="relative flex-1 flex flex-col items-center justify-center gap-1"
               >
                 <span
                   className={cn(
-                    "flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200",
-                    active ? "bg-[#0B0D12] shadow-[0_3px_10px_-2px_rgba(217,119,6,0.45)]" : ""
+                    "flex items-center justify-center w-9 h-8 rounded-lg transition-colors duration-150",
+                    active ? "bg-accent-tint" : "",
                   )}
                 >
                   <Icon
                     className={cn(
                       "w-[19px] h-[19px] transition-colors",
-                      active ? "text-[#F59E0B]" : "text-black/55"
+                      active ? "text-accent-ink" : "text-faint",
                     )}
-                    strokeWidth={active ? 2.3 : 2}
+                    strokeWidth={2}
                   />
                 </span>
                 <span
                   className={cn(
-                    "text-[9px] font-medium tracking-tight transition-colors",
-                    active ? "text-black/80" : "text-black/0"
+                    "text-[9px] font-semibold tracking-tight transition-colors",
+                    active ? "text-accent-ink" : "text-transparent",
                   )}
                 >
                   {active ? label : ""}

@@ -13,7 +13,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <ToastProvider>
       <ConfirmProvider>
-        <div className="min-h-screen bg-[#F7F8FA]">
+        <div className="min-h-screen bg-canvas">
           <Sidebar userEmail={session.user?.email ?? ""} />
           <main className="md:ml-[248px] pt-14 pb-24 md:pt-0 md:pb-0 min-h-screen overflow-y-auto">
             <div className="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto">{children}</div>

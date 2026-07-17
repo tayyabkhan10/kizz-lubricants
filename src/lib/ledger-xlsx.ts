@@ -15,9 +15,9 @@ export const XLSX_MIME =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 // Brand palette (ARGB).
-const INK = "FF111318";
-const AMBER = "FFD97706";
-const AMBER_TINT = "FFFDF1E3";
+const INK = "FF15161A";
+const ACCENT = "FF6D5EF0";
+const ACCENT_TINT = "FFEDEBFD";
 const STRIPE = "FFF7F8FA";
 const LABEL_BG = "FFEEF0F3";
 const BORDER = "FFE2E4E8";
@@ -95,11 +95,11 @@ export async function buildLedgerBlob(customer: FullCustomer): Promise<Blob> {
   // ── Row 1: dark letterhead banner ─────────────────────────
   ws.getRow(1).height = 30;
   merge(1, 1, 1, 6, BUSINESS_NAME, { fill: INK, color: WHITE, bold: true, size: 16, align: "left", indent: 1 });
-  merge(1, 7, 1, 9, "LEDGER STATEMENT", { fill: INK, color: "FFF0B267", bold: true, size: 9, align: "right", indent: 1 });
+  merge(1, 7, 1, 9, "LEDGER STATEMENT", { fill: INK, color: "FFB9B0F7", bold: true, size: 9, align: "right", indent: 1 });
 
-  // ── Row 2: thin amber accent rule ─────────────────────────
+  // ── Row 2: thin accent rule ───────────────────────────────
   ws.getRow(2).height = 5;
-  merge(2, 1, 2, 9, "", { fill: AMBER });
+  merge(2, 1, 2, 9, "", { fill: ACCENT });
 
   // ── Rows 4-7: customer info grid (label | value pairs) ────
   const info = (row: number, lLabel: string, lValue: string, rLabel: string, rValue: string) => {
@@ -127,7 +127,7 @@ export async function buildLedgerBlob(customer: FullCustomer): Promise<Blob> {
   const fit = (col0: number, text: string) => { widths[col0] = Math.max(widths[col0], text.length); };
 
   // ── Data rows ─────────────────────────────────────────────
-  const balColor = (b: number) => (b > 0 ? AMBER : b < 0 ? GREEN : MUTED);
+  const balColor = (b: number) => (b > 0 ? ACCENT : b < 0 ? GREEN : MUTED);
   let idx = 0;
   for (const e of customer.entries) {
     const rr = HEADER_ROW + 1 + idx;
@@ -170,10 +170,10 @@ export async function buildLedgerBlob(customer: FullCustomer): Promise<Blob> {
   const currentBalance = last ? toNum(last.balance) : 0;
   const tr = HEADER_ROW + 1 + idx;
   const topMed: Border = { top: { style: "medium", color: { argb: INK } }, left: thin, right: thin, bottom: thin };
-  merge(tr, 1, tr, 6, "TOTAL", { fill: AMBER_TINT, bold: true, size: 10, align: "right", indent: 1, border: topMed });
-  setCell(tr, 7, totalDebit, { fill: AMBER_TINT, bold: true, align: "right", numFmt: NUM_FMT, border: topMed });
-  setCell(tr, 8, totalCredit, { fill: AMBER_TINT, bold: true, color: GREEN, align: "right", numFmt: NUM_FMT, border: topMed });
-  setCell(tr, 9, currentBalance === 0 ? "nil" : currentBalance, { fill: AMBER_TINT, bold: true, color: balColor(currentBalance), align: "right", numFmt: NUM_FMT, border: topMed });
+  merge(tr, 1, tr, 6, "TOTAL", { fill: ACCENT_TINT, bold: true, size: 10, align: "right", indent: 1, border: topMed });
+  setCell(tr, 7, totalDebit, { fill: ACCENT_TINT, bold: true, align: "right", numFmt: NUM_FMT, border: topMed });
+  setCell(tr, 8, totalCredit, { fill: ACCENT_TINT, bold: true, color: GREEN, align: "right", numFmt: NUM_FMT, border: topMed });
+  setCell(tr, 9, currentBalance === 0 ? "nil" : currentBalance, { fill: ACCENT_TINT, bold: true, color: balColor(currentBalance), align: "right", numFmt: NUM_FMT, border: topMed });
   fit(6, grp(totalDebit));
   fit(7, grp(totalCredit));
   fit(8, currentBalance === 0 ? "nil" : grp(currentBalance));

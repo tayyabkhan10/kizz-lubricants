@@ -53,19 +53,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           <div
             key={t.id}
             role="status"
-            className={`toast-in pointer-events-auto flex items-start gap-3 rounded-xl border bg-white px-4 py-3 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.25)] ${
-              t.kind === "success" ? "border-emerald-200" : "border-rose-200"
-            }`}
+            className="toast-in pointer-events-auto flex items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3 shadow-pop"
           >
             {t.kind === "success" ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" strokeWidth={2} />
+              <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" strokeWidth={2} />
             ) : (
-              <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" strokeWidth={2} />
+              <AlertCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" strokeWidth={2} />
             )}
-            <p className="flex-1 text-sm text-gray-700 leading-snug">{t.message}</p>
+            <p className="flex-1 text-sm text-ink leading-snug">{t.message}</p>
             <button
               onClick={() => remove(t.id)}
-              className="text-gray-300 hover:text-gray-500 flex-shrink-0 transition-colors"
+              className="text-muted/50 hover:text-muted flex-shrink-0 transition-colors"
               aria-label="Dismiss"
             >
               <X className="w-4 h-4" strokeWidth={2} />

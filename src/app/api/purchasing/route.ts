@@ -3,19 +3,30 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/db";
 import { purchasing } from "@/db/schema";
-import { desc, sql, ilike } from "drizzle-orm";
+import { asc, desc, sql, ilike } from "drizzle-orm";
+import { parseListParams } from "@/lib/pagination";
+
+const SORT = { date: purchasing.date, amount: purchasing.amount } as const;
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const search = req.nextUrl.searchParams.get("search") ?? "";
-  const [rows, [{ total }]] = await Promise.all([
-    search
-      ? db.select().from(purchasing).where(ilike(purchasing.detail, `%${search}%`)).orderBy(desc(purchasing.date), desc(purchasing.id))
-      : db.select().from(purchasing).orderBy(desc(purchasing.date), desc(purchasing.id)),
-    db.select({ total: sql<string>`COALESCE(SUM(amount),0)` }).from(purchasing),
+
+  const { search, page, limit, offset, sort, dir } = parseListParams(req, {
+    sortable: Object.keys(SORT),
+    defaultSort: "date",
+  });
+  const where = search ? ilike(purchasing.detail, `%${search}%`) : undefined;
+  const col = SORT[sort as keyof typeof SORT];
+  const order = dir === "asc" ? [asc(col), asc(purchasing.id)] : [desc(col), desc(purchasing.id)];
+
+  const [rows, [{ total }], [{ count }]] = await Promise.all([
+    db.select().from(purchasing).where(where).orderBy(...order).limit(limit).offset(offset),
+    db.select({ total: sql<string>`COALESCE(SUM(amount),0)` }).from(purchasing).where(where),
+    db.select({ count: sql<string>`COUNT(*)` }).from(purchasing).where(where),
   ]);
-  return NextResponse.json({ rows, total: Number(total) });
+
+  return NextResponse.json({ rows, total: Number(total), count: Number(count), page, limit });
 }
 
 export async function POST(req: NextRequest) {

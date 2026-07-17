@@ -8,6 +8,12 @@ async function req<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!res.ok) {
+    // Session expired / not authenticated — send the user back to sign-in
+    // instead of surfacing a broken page.
+    if (res.status === 401 && typeof window !== "undefined") {
+      window.location.assign("/");
+      throw new Error("Session expired");
+    }
     const body = await res.json().catch(() => ({}));
     throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
   }

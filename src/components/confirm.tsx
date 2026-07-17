@@ -61,23 +61,18 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="dialog-in w-full max-w-sm bg-white rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.35)] p-6"
+            className="dialog-in w-full max-w-sm card shadow-pop p-6"
           >
-            <p className="text-base font-semibold text-gray-900">{opts.title}</p>
-            {opts.message && <p className="mt-2 text-sm text-gray-500 leading-snug">{opts.message}</p>}
+            <p className="text-base font-semibold text-ink">{opts.title}</p>
+            {opts.message && <p className="mt-2 text-sm text-muted leading-snug">{opts.message}</p>}
             <div className="mt-6 flex gap-3 justify-end">
-              <button
-                onClick={() => close(false)}
-                className="px-4 py-2.5 border border-gray-200 text-gray-600 text-sm font-semibold rounded-xl hover:bg-gray-50 transition-colors"
-              >
+              <button onClick={() => close(false)} className="btn-secondary">
                 {opts.cancelText ?? "Cancel"}
               </button>
               <button
                 autoFocus
                 onClick={() => close(true)}
-                className={`px-4 py-2.5 text-white text-sm font-semibold rounded-xl transition-colors ${
-                  opts.danger ? "bg-rose-600 hover:bg-rose-700" : "bg-[#111318] hover:bg-black"
-                }`}
+                className={opts.danger ? "btn-danger" : "btn-primary"}
               >
                 {opts.confirmText ?? "Confirm"}
               </button>

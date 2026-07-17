@@ -3,13 +3,15 @@
 @tailwind utilities;
 
 :root {
-  --ring: rgba(217, 119, 6, 0.35);
+  --ring: rgba(109, 94, 240, 0.45);
 }
 
 html,
 body {
-  background: #ffffff;
-  color: #16181d;
+  background: #f4f5f9;
+  color: #26262f;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 * {
@@ -17,14 +19,19 @@ body {
 }
 
 ::selection {
-  background: rgba(217, 119, 6, 0.18);
+  background: rgba(109, 94, 240, 0.18);
+  color: #17161d;
 }
 
-input:focus-visible,
-button:focus-visible,
-a:focus-visible {
+:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+
+/* Tabular figures wherever the data face is used. */
+.font-mono {
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -36,6 +43,94 @@ a:focus-visible {
   }
 }
 
+@layer base {
+  /* Confident, tightly-tracked headings — the type carries the personality. */
+  h1 {
+    @apply tracking-tightest;
+  }
+  h2,
+  h3 {
+    @apply tracking-tight;
+  }
+}
+
+/* ── Shared component layer ─────────────────────────────────────────── */
+@layer components {
+  /* Micro-label / eyebrow — the finance-dashboard signature detail. */
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-eyebrow text-faint;
+  }
+
+  /* Cards — real elevation, hairline edge. */
+  .card {
+    @apply bg-surface border border-line rounded-2xl shadow-card;
+  }
+  .card-interactive {
+    @apply card transition-[box-shadow,border-color,transform] duration-200
+           hover:shadow-card-hover hover:border-line-strong;
+  }
+
+  /* Buttons — subtle depth, not flat rectangles. */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5
+           text-[13.5px] font-medium leading-none transition-all duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none
+           active:translate-y-px select-none;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-white shadow-btn
+           hover:bg-accent-hover hover:shadow-accent-glow;
+  }
+  .btn-secondary {
+    @apply btn bg-surface border border-line-strong text-ink shadow-btn
+           hover:bg-canvas hover:border-line-strong;
+  }
+  .btn-ghost {
+    @apply btn text-muted hover:text-ink hover:bg-black/[0.04];
+  }
+  .btn-danger {
+    @apply btn bg-danger text-white shadow-btn hover:brightness-95;
+  }
+  .btn-sm {
+    @apply px-3 py-2 text-[12.5px];
+  }
+
+  /* Form controls */
+  .label {
+    @apply block text-[12px] font-medium text-muted mb-1.5;
+  }
+  .input,
+  .select,
+  .textarea {
+    @apply w-full rounded-lg border border-line-strong bg-surface px-3.5 py-2.5
+           text-[14.5px] text-ink placeholder:text-faint/70
+           transition-[border-color,box-shadow] focus:border-accent focus:outline-none
+           focus:shadow-focus;
+  }
+
+  /* Badges / chips */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-md px-2 py-0.5
+           text-[11px] font-semibold tracking-tight;
+  }
+  .badge-accent {
+    @apply badge bg-accent-tint text-accent-ink;
+  }
+  .badge-neutral {
+    @apply badge bg-black/[0.05] text-muted;
+  }
+
+  /* Tables */
+  .th {
+    @apply text-left px-4 py-3 text-[11px] font-semibold uppercase
+           tracking-eyebrow text-faint;
+  }
+  .td {
+    @apply px-4 py-3.5 text-sm text-ink;
+  }
+}
+
+/* ── Motion — transform/opacity only, kept snappy ───────────────────── */
 @keyframes rise {
   from {
     opacity: 0;
@@ -47,32 +142,57 @@ a:focus-visible {
   }
 }
 .rise {
-  animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
-.rise-1 { animation-delay: 0.05s; }
-.rise-2 { animation-delay: 0.12s; }
-.rise-3 { animation-delay: 0.19s; }
-
-
-h1, h2, h3, h4, h5, h6, .font-display {
-  font-family: var(--font-orbitron), sans-serif !important;
-  letter-spacing: 2px !important; /* 3px tracking force apply */
+.rise-1 {
+  animation-delay: 0.05s;
+}
+.rise-2 {
+  animation-delay: 0.1s;
+}
+.rise-3 {
+  animation-delay: 0.16s;
+}
+.rise-4 {
+  animation-delay: 0.22s;
 }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
-.toast-in { animation: toast-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.toast-in {
+  animation: toast-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
 
 @keyframes dialog-backdrop {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
-.dialog-backdrop { animation: dialog-backdrop 0.15s ease-out both; }
+.dialog-backdrop {
+  animation: dialog-backdrop 0.14s ease-out both;
+}
 
 @keyframes dialog-in {
-  from { opacity: 0; transform: scale(0.96) translateY(6px); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
-.dialog-in { animation: dialog-in 0.16s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.dialog-in {
+  animation: dialog-in 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
+}

@@ -1,26 +1,19 @@
 import type { Metadata } from "next";
-import { Inter, Orbitron, IBM_Plex_Mono } from "next/font/google";
+import { Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
-// 1. Orbitron ko wapas import karein
-const inter = Inter({ 
-  subsets: ["latin"], 
+const inter = Inter({
+  subsets: ["latin"],
   variable: "--font-inter",
-  display: "swap" // Lag/blink hatane ke liye ye bahut zaroori hai
+  display: "swap",
 });
 
-const orbitron = Orbitron({ 
-  subsets: ["latin"], 
-  weight: ["400", "500", "600", "700", "800", "900"], 
-  variable: "--font-orbitron",
-  display: "swap"
-});
-
-const plexMono = IBM_Plex_Mono({ 
-  subsets: ["latin"], 
-  weight: ["400", "500", "600"], 
+// Kept for tabular figures on numbers / IDs only.
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
   variable: "--font-plex-mono",
-  display: "swap"
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -30,10 +23,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} ${orbitron.variable} ${plexMono.variable}`}>
-      <body className="font-body antialiased bg-white text-ink">
-        {children}
-      </body>
+    <html lang="en" className={`${inter.variable} ${plexMono.variable}`}>
+      <body className="font-body antialiased bg-canvas text-ink">{children}</body>
     </html>
   );
 }

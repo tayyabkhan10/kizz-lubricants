@@ -3,32 +3,38 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/db";
 import { customers } from "@/db/schema";
-import { ilike, or, sql } from "drizzle-orm";
+import { asc, ilike, or, sql } from "drizzle-orm";
+import { parseListParams } from "@/lib/pagination";
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const search = req.nextUrl.searchParams.get("search") ?? "";
 
-  // Two independent queries in parallel: the customer list, and each
-  // customer's latest running balance in a single DISTINCT ON pass.
-  // (Replaces the old client-side N+1 that fetched every ledger per customer.)
-  const [list, balances] = await Promise.all([
-    search
-      ? db.select().from(customers).where(or(ilike(customers.name, `%${search}%`), ilike(customers.address, `%${search}%`)))
-      : db.select().from(customers),
+  const { search, page, limit, offset } = parseListParams(req, {
+    sortable: ["name"],
+    defaultSort: "name",
+  });
+  const where = search
+    ? or(ilike(customers.name, `%${search}%`), ilike(customers.address, `%${search}%`))
+    : undefined;
+
+  // A page of customers, that page's balances (latest running balance per
+  // customer in one DISTINCT ON pass), and the total matching count — parallel.
+  const [list, balances, [{ count }]] = await Promise.all([
+    db.select().from(customers).where(where).orderBy(asc(customers.name), asc(customers.id)).limit(limit).offset(offset),
     db.execute(sql`
       SELECT DISTINCT ON (customer_id) customer_id, balance
       FROM customer_entries
       ORDER BY customer_id, date DESC, id DESC
     `),
+    db.select({ count: sql<string>`COUNT(*)` }).from(customers).where(where),
   ]);
 
   const balMap = new Map(
     (balances.rows as Array<{ customer_id: number; balance: string }>).map((r) => [Number(r.customer_id), Number(r.balance)])
   );
   const rows = list.map((c) => ({ ...c, balance: balMap.get(c.id) ?? 0 }));
-  return NextResponse.json(rows);
+  return NextResponse.json({ rows, count: Number(count), page, limit });
 }
 
 export async function POST(req: NextRequest) {

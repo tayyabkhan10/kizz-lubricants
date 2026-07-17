@@ -5,22 +5,31 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/db";
 import { salary } from "@/db/schema";
-import { desc, sql, ilike } from "drizzle-orm";
+import { asc, desc, sql, ilike } from "drizzle-orm";
+import { parseListParams } from "@/lib/pagination";
 
 export const dynamic = "force-dynamic"; // ensures this route is never cached/stale
+
+const SORT = { date: salary.date, amount: salary.amount, employee: salary.employee } as const;
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const search = req.nextUrl.searchParams.get("search") ?? "";
-    const [rows, [{ total }]] = await Promise.all([
-      search
-        ? db.select().from(salary).where(ilike(salary.employee, `%${search}%`)).orderBy(desc(salary.date), desc(salary.id))
-        : db.select().from(salary).orderBy(desc(salary.date), desc(salary.id)),
-      db.select({ total: sql<string>`COALESCE(SUM(amount),0)` }).from(salary),
+    const { search, page, limit, offset, sort, dir } = parseListParams(req, {
+      sortable: Object.keys(SORT),
+      defaultSort: "date",
+    });
+    const where = search ? ilike(salary.employee, `%${search}%`) : undefined;
+    const col = SORT[sort as keyof typeof SORT];
+    const order = dir === "asc" ? [asc(col), asc(salary.id)] : [desc(col), desc(salary.id)];
+
+    const [rows, [{ total }], [{ count }]] = await Promise.all([
+      db.select().from(salary).where(where).orderBy(...order).limit(limit).offset(offset),
+      db.select({ total: sql<string>`COALESCE(SUM(amount),0)` }).from(salary).where(where),
+      db.select({ count: sql<string>`COUNT(*)` }).from(salary).where(where),
     ]);
-    return NextResponse.json({ rows, total: Number(total) });
+    return NextResponse.json({ rows, total: Number(total), count: Number(count), page, limit });
   } catch (err) {
     console.error("GET /salary failed:", err);
     return NextResponse.json({ error: "Failed to fetch salary records" }, { status: 500 });

@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { formatMoney, monthLabel } from "@/lib/utils";
 import { createLocalCache } from "@/lib/localCache";
+import { EmptyState, ErrorState } from "@/components/states";
+import { BarChart3 } from "lucide-react";
 
 type MonthRow = {
   month: string;
@@ -27,15 +29,32 @@ export default function PnlPage() {
   const cached0 = pnlCache.get("");
   const [data, setData] = useState<PnlData | null>(cached0 ?? null);
   const [loading, setLoading] = useState(!cached0);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
-    api.get<PnlData>("/pnl").then((d) => { pnlCache.set("", d); setData(d); }).finally(() => setLoading(false));
+  const load = useCallback(() => {
+    setError(false);
+    api.get<PnlData>("/pnl")
+      .then((d) => { pnlCache.set("", d); setData(d); })
+      .catch(() => { if (!pnlCache.get("")) setError(true); })
+      .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   if (loading) return (
     <div className="space-y-4">
-      <div className="h-6 w-48 bg-gray-100 rounded animate-pulse" />
-      <div className="h-80 bg-gray-100 rounded-2xl animate-pulse" />
+      <div className="h-6 w-48 bg-black/[0.04] rounded animate-pulse" />
+      <div className="h-80 bg-black/[0.04] rounded-2xl animate-pulse" />
+    </div>
+  );
+
+  if (error && !data) return (
+    <div className="space-y-6">
+      <div>
+        <p className="eyebrow">Analysis</p>
+        <h1 className="mt-1.5 text-[26px] font-semibold text-ink">Profit &amp; Loss</h1>
+      </div>
+      <div className="card"><ErrorState onRetry={() => { setLoading(true); load(); }} /></div>
     </div>
   );
 
@@ -45,38 +64,38 @@ export default function PnlPage() {
   return (
     <div className="space-y-8">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-600 font-mono">Analysis</p>
-        <h1 className="mt-1 text-2xl font-display font-bold uppercase tracking-wide text-gray-900">Profit & Loss</h1>
-        <p className="mt-1 text-sm text-gray-500">Monthly breakdown of sales against all costs — purchasing, expenses and salary.</p>
+        <p className="eyebrow">Analysis</p>
+        <h1 className="mt-1.5 text-[26px] font-semibold text-ink">Profit &amp; Loss</h1>
+        <p className="mt-1 text-sm text-muted">Monthly breakdown of sales against all costs — purchasing, expenses and salary.</p>
       </div>
 
       {/* Grand total banner */}
       {g && (
-        <div className={`rounded-2xl p-6 border ${isProfit ? "bg-emerald-50 border-emerald-200" : "bg-rose-50 border-rose-200"}`}>
-          <p className={`text-[11px] font-semibold uppercase tracking-wider ${isProfit ? "text-emerald-600" : "text-rose-600"}`}>
-            {isProfit ? "Overall Net Profit" : "Overall Net Loss"}
-          </p>
-          <p className={`mt-1 font-mono text-4xl font-bold ${isProfit ? "text-emerald-700" : "text-rose-700"}`}>
+        <div className="card p-6">
+          <div className="flex items-center gap-2">
+            <span className={`badge ${isProfit ? "bg-success-tint text-success" : "bg-danger-tint text-danger"}`}>
+              {isProfit ? "Overall Net Profit" : "Overall Net Loss"}
+            </span>
+            <span className="text-xs text-muted">{g.margin.toFixed(1)}% margin — all time</span>
+          </div>
+          <p className={`mt-3 font-mono text-4xl font-semibold tabular-nums ${isProfit ? "text-ink" : "text-danger"}`}>
             {formatMoney(Math.abs(g.profit))}
           </p>
-          <p className={`mt-1.5 text-sm ${isProfit ? "text-emerald-600/80" : "text-rose-600/80"}`}>
-            {g.margin.toFixed(1)}% profit margin — All time
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 mt-6 pt-6 border-t border-current/10">
-            <div><p className="text-[11px] text-gray-500 uppercase tracking-wider">Total Sales</p><p className="font-mono font-bold text-gray-900 mt-0.5">{formatMoney(g.sales)}</p></div>
-            <div><p className="text-[11px] text-gray-500 uppercase tracking-wider">Purchasing</p><p className="font-mono font-bold text-gray-900 mt-0.5">{formatMoney(g.purchasing)}</p></div>
-            <div><p className="text-[11px] text-gray-500 uppercase tracking-wider">Expenses</p><p className="font-mono font-bold text-gray-900 mt-0.5">{formatMoney(g.expenses)}</p></div>
-            <div><p className="text-[11px] text-gray-500 uppercase tracking-wider">Salary</p><p className="font-mono font-bold text-gray-900 mt-0.5">{formatMoney(g.salary)}</p></div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 mt-6 pt-6 border-t border-line">
+            <div><p className="text-[11px] text-muted uppercase tracking-wider">Total Sales</p><p className="font-mono font-semibold text-ink mt-0.5 tabular-nums">{formatMoney(g.sales)}</p></div>
+            <div><p className="text-[11px] text-muted uppercase tracking-wider">Purchasing</p><p className="font-mono font-semibold text-ink mt-0.5 tabular-nums">{formatMoney(g.purchasing)}</p></div>
+            <div><p className="text-[11px] text-muted uppercase tracking-wider">Expenses</p><p className="font-mono font-semibold text-ink mt-0.5 tabular-nums">{formatMoney(g.expenses)}</p></div>
+            <div><p className="text-[11px] text-muted uppercase tracking-wider">Salary</p><p className="font-mono font-semibold text-ink mt-0.5 tabular-nums">{formatMoney(g.salary)}</p></div>
           </div>
         </div>
       )}
 
       {/* Monthly table */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[820px]">
             <thead>
-              <tr className="bg-gradient-to-r from-[#1C1F27] via-[#101318] to-[#0B0D12] text-white">
+              <tr className="bg-black/[0.02] border-b border-line">
                 {[
                   { label: "Month", align: "text-left" },
                   { label: "Sales", align: "text-right" },
@@ -87,32 +106,37 @@ export default function PnlPage() {
                   { label: "Profit / Loss", align: "text-right" },
                   { label: "Margin", align: "text-right" },
                 ].map(({ label, align }) => (
-                  <th key={label} className={`py-3 px-4 text-[11px] font-semibold uppercase tracking-wider ${align}`}>{label}</th>
+                  <th key={label} className={`th ${align}`}>{label}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-line">
               {!data || data.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-10 text-center text-gray-500 text-sm">
-                    No data yet. Add sales, purchases, expenses and salary to see P&L.
+                  <td colSpan={8}>
+                    <EmptyState
+                      icon={BarChart3}
+                      compact
+                      title="Nothing to analyse yet"
+                      description="Add sales, purchases, expenses and salary, and your monthly profit &amp; loss will build here."
+                    />
                   </td>
                 </tr>
               ) : data.rows.map((r) => {
                 const isP = r.profit >= 0;
                 return (
-                  <tr key={r.month} className="hover:bg-gray-50/50 transition-colors">
-                    <td className="px-4 py-3.5 font-semibold text-gray-800">{monthLabel(r.month)}</td>
-                    <td className="px-4 py-3.5 text-right font-mono text-emerald-600 font-semibold">{formatMoney(r.sales)}</td>
-                    <td className="px-4 py-3.5 text-right font-mono text-gray-500">{formatMoney(r.purchasing)}</td>
-                    <td className="px-4 py-3.5 text-right font-mono text-gray-500">{formatMoney(r.expenses)}</td>
-                    <td className="px-4 py-3.5 text-right font-mono text-gray-500">{formatMoney(r.salary)}</td>
-                    <td className="px-4 py-3.5 text-right font-mono text-rose-600">{formatMoney(r.totalCost)}</td>
-                    <td className={`px-4 py-3.5 text-right font-mono font-bold ${isP ? "text-emerald-600" : "text-rose-600"}`}>
+                  <tr key={r.month} className="hover:bg-black/[0.015] transition-colors">
+                    <td className="px-4 py-3.5 font-medium text-ink">{monthLabel(r.month)}</td>
+                    <td className="px-4 py-3.5 text-right font-mono text-ink tabular-nums">{formatMoney(r.sales)}</td>
+                    <td className="px-4 py-3.5 text-right font-mono text-muted tabular-nums">{formatMoney(r.purchasing)}</td>
+                    <td className="px-4 py-3.5 text-right font-mono text-muted tabular-nums">{formatMoney(r.expenses)}</td>
+                    <td className="px-4 py-3.5 text-right font-mono text-muted tabular-nums">{formatMoney(r.salary)}</td>
+                    <td className="px-4 py-3.5 text-right font-mono text-muted tabular-nums">{formatMoney(r.totalCost)}</td>
+                    <td className={`px-4 py-3.5 text-right font-mono font-semibold tabular-nums ${isP ? "text-success" : "text-danger"}`}>
                       {isP ? "" : "−"}{formatMoney(Math.abs(r.profit))}
                     </td>
                     <td className="px-4 py-3.5 text-right">
-                      <span className={`inline-block text-[11px] font-semibold px-2.5 py-1 rounded-full ${isP ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>
+                      <span className={`badge ${isP ? "bg-success-tint text-success" : "bg-danger-tint text-danger"}`}>
                         {r.margin.toFixed(1)}%
                       </span>
                     </td>
@@ -122,18 +146,18 @@ export default function PnlPage() {
             </tbody>
             {g && data && data.rows.length > 0 && (
               <tfoot>
-                <tr className="border-t-2 border-gray-200 bg-gray-50 font-bold">
-                  <td className="px-4 py-3.5 text-[12px] uppercase tracking-wider text-gray-600">Grand Total</td>
-                  <td className="px-4 py-3.5 text-right font-mono text-emerald-700">{formatMoney(g.sales)}</td>
-                  <td className="px-4 py-3.5 text-right font-mono text-gray-600">{formatMoney(g.purchasing)}</td>
-                  <td className="px-4 py-3.5 text-right font-mono text-gray-600">{formatMoney(g.expenses)}</td>
-                  <td className="px-4 py-3.5 text-right font-mono text-gray-600">{formatMoney(g.salary)}</td>
-                  <td className="px-4 py-3.5 text-right font-mono text-rose-700">{formatMoney(g.totalCost)}</td>
-                  <td className={`px-4 py-3.5 text-right font-mono text-[14px] ${isProfit ? "text-emerald-700" : "text-rose-700"}`}>
+                <tr className="border-t border-line bg-black/[0.02] font-semibold">
+                  <td className="px-4 py-3.5 text-[12px] uppercase tracking-wider text-muted">Grand Total</td>
+                  <td className="px-4 py-3.5 text-right font-mono text-ink tabular-nums">{formatMoney(g.sales)}</td>
+                  <td className="px-4 py-3.5 text-right font-mono text-muted tabular-nums">{formatMoney(g.purchasing)}</td>
+                  <td className="px-4 py-3.5 text-right font-mono text-muted tabular-nums">{formatMoney(g.expenses)}</td>
+                  <td className="px-4 py-3.5 text-right font-mono text-muted tabular-nums">{formatMoney(g.salary)}</td>
+                  <td className="px-4 py-3.5 text-right font-mono text-muted tabular-nums">{formatMoney(g.totalCost)}</td>
+                  <td className={`px-4 py-3.5 text-right font-mono text-[14px] tabular-nums ${isProfit ? "text-success" : "text-danger"}`}>
                     {isProfit ? "" : "−"}{formatMoney(Math.abs(g.profit))}
                   </td>
                   <td className="px-4 py-3.5 text-right">
-                    <span className={`inline-block text-[11px] font-semibold px-2.5 py-1 rounded-full ${isProfit ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+                    <span className={`badge ${isProfit ? "bg-success-tint text-success" : "bg-danger-tint text-danger"}`}>
                       {g.margin.toFixed(1)}%
                     </span>
                   </td>
