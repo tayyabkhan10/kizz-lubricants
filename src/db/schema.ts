@@ -35,9 +35,10 @@ export const customers = pgTable("customers", {
 });
 
 // ─── Customer Ledger Entries ──────────────────────────────────
-// Debit  = customer owes us (we sold to them / they bought from us)
-// Credit = customer paid us (payment received)
-// Balance runs from oldest to newest: prev_balance - debit + credit
+// Debit  = goods billed to the customer (increases what they owe us)
+// Credit = payment received from the customer (reduces what they owe)
+// Running balance, oldest → newest: balance[n] = balance[n-1] + debit − credit
+//   (see recalcBalances in src/lib/ledger.ts — that code is authoritative)
 export const customerEntries = pgTable("customer_entries", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id")

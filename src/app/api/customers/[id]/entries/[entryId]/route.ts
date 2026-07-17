@@ -4,22 +4,19 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/db";
 import { customerEntries } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
+import { recalcBalances } from "@/lib/ledger";
 
-async function recalcBalances(customerId: number) {
-  const entries = await db
+export const dynamic = "force-dynamic";
+
+/** Coerce an optional numeric field to the DB's string|null shape. */
+const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : String(v));
+
+function entriesFor(customerId: number) {
+  return db
     .select()
     .from(customerEntries)
     .where(eq(customerEntries.customerId, customerId))
     .orderBy(asc(customerEntries.date), asc(customerEntries.id));
-
-  let running = 0;
-  for (const entry of entries) {
-    running = running + Number(entry.debit ?? 0) - Number(entry.credit ?? 0);
-    await db
-      .update(customerEntries)
-      .set({ balance: String(running) })
-      .where(eq(customerEntries.id, entry.id));
-  }
 }
 
 export async function DELETE(
@@ -29,17 +26,15 @@ export async function DELETE(
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const customerId = Number(params.id);
-  await db.delete(customerEntries).where(eq(customerEntries.id, Number(params.entryId)));
-  await recalcBalances(customerId);
-
-  const entries = await db
-    .select()
-    .from(customerEntries)
-    .where(eq(customerEntries.customerId, customerId))
-    .orderBy(asc(customerEntries.date), asc(customerEntries.id));
-
-  return NextResponse.json(entries);
+  try {
+    const customerId = Number(params.id);
+    await db.delete(customerEntries).where(eq(customerEntries.id, Number(params.entryId)));
+    await recalcBalances(customerId);
+    return NextResponse.json(await entriesFor(customerId));
+  } catch (err) {
+    console.error("DELETE /customers/[id]/entries/[entryId] failed:", err);
+    return NextResponse.json({ error: "Failed to delete ledger entry." }, { status: 500 });
+  }
 }
 
 export async function PATCH(
@@ -49,17 +44,33 @@ export async function PATCH(
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const customerId = Number(params.id);
-  const body = await req.json();
+  try {
+    const customerId = Number(params.id);
+    const b = await req.json();
 
-  await db.update(customerEntries).set(body).where(eq(customerEntries.id, Number(params.entryId)));
-  await recalcBalances(customerId);
+    if (!b.date) return NextResponse.json({ error: "date is required" }, { status: 400 });
 
-  const entries = await db
-    .select()
-    .from(customerEntries)
-    .where(eq(customerEntries.customerId, customerId))
-    .orderBy(asc(customerEntries.date), asc(customerEntries.id));
+    // Whitelist editable columns only — never trust the raw body to set id,
+    // customerId, balance or createdAt. balance is recomputed below regardless.
+    await db
+      .update(customerEntries)
+      .set({
+        date: b.date,
+        product: b.product ?? null,
+        packing: b.packing ?? null,
+        unit: b.unit ?? null,
+        qty: num(b.qty),
+        rate: num(b.rate),
+        debit: String(Number(b.debit ?? 0)),
+        credit: String(Number(b.credit ?? 0)),
+        account: b.account ?? null,
+      })
+      .where(eq(customerEntries.id, Number(params.entryId)));
 
-  return NextResponse.json(entries);
+    await recalcBalances(customerId);
+    return NextResponse.json(await entriesFor(customerId));
+  } catch (err) {
+    console.error("PATCH /customers/[id]/entries/[entryId] failed:", err);
+    return NextResponse.json({ error: "Failed to update ledger entry." }, { status: 500 });
+  }
 }

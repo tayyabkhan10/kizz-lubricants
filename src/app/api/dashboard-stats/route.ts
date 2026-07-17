@@ -11,6 +11,7 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  try {
   // Every read fires in one parallel batch so total latency is one round-trip,
   // not seven in series.
   const [
@@ -57,4 +58,8 @@ export async function GET() {
     },
     topBalances: balancesRes.rows,
   });
+  } catch (err) {
+    console.error("GET /dashboard-stats failed:", err);
+    return NextResponse.json({ error: "Failed to load dashboard stats." }, { status: 500 });
+  }
 }

@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
 
+export const dynamic = "force-dynamic";
+
 type MonthBucket = {
   sales: number;
   purchasing: number;
@@ -15,6 +17,7 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  try {
   // Group each table by YYYY-MM
   const [salesRows, purchRows, expRows, salRows] = await Promise.all([
     db.execute(sql`SELECT TO_CHAR(date, 'YYYY-MM') AS month, SUM(amount) AS total FROM sales GROUP BY 1 ORDER BY 1`),
@@ -59,5 +62,9 @@ export async function GET() {
   );
   const grandMargin = grand.sales > 0 ? (grand.profit / grand.sales) * 100 : 0;
 
-  return NextResponse.json({ rows, grand: { ...grand, margin: grandMargin } });
+    return NextResponse.json({ rows, grand: { ...grand, margin: grandMargin } });
+  } catch (err) {
+    console.error("GET /pnl failed:", err);
+    return NextResponse.json({ error: "Failed to build profit & loss." }, { status: 500 });
+  }
 }

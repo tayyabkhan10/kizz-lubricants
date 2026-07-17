@@ -5,17 +5,40 @@ import { db } from "@/db";
 import { expenses } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
+export const dynamic = "force-dynamic";
+
 export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  await db.delete(expenses).where(eq(expenses.id, Number(params.id)));
-  return NextResponse.json({ ok: true });
+  try {
+    await db.delete(expenses).where(eq(expenses.id, Number(params.id)));
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("DELETE /expenses/[id] failed:", err);
+    return NextResponse.json({ error: "Failed to delete expense." }, { status: 500 });
+  }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const body = await req.json();
-  const [row] = await db.update(expenses).set(body).where(eq(expenses.id, Number(params.id))).returning();
-  return NextResponse.json(row);
+  try {
+    const b = await req.json();
+    const update: Record<string, unknown> = {};
+    if ("date" in b) update.date = b.date;
+    if ("detail" in b) update.detail = b.detail;
+    if ("amount" in b) {
+      const n = Number(b.amount);
+      if (!Number.isFinite(n)) return NextResponse.json({ error: "amount must be a number." }, { status: 400 });
+      update.amount = String(n);
+    }
+    if (Object.keys(update).length === 0) {
+      return NextResponse.json({ error: "No editable fields provided." }, { status: 400 });
+    }
+    const [row] = await db.update(expenses).set(update).where(eq(expenses.id, Number(params.id))).returning();
+    return NextResponse.json(row);
+  } catch (err) {
+    console.error("PATCH /expenses/[id] failed:", err);
+    return NextResponse.json({ error: "Failed to update expense." }, { status: 500 });
+  }
 }

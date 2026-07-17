@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import {
   LayoutGrid,
@@ -47,8 +47,10 @@ function Brand() {
   );
 }
 
-export default function Sidebar({ userEmail }: { userEmail: string }) {
+export default function Sidebar() {
   const path = usePathname();
+  const { data: session } = useSession();
+  const userEmail = session?.user?.email ?? "";
 
   const isActive = (href: string) =>
     href === "/dashboard" ? path === "/dashboard" : path.startsWith(href);
