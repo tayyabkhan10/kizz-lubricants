@@ -62,7 +62,11 @@ export default function ExpensesPage() {
     }
   }, []);
 
-  useEffect(() => { load("", 1, initSort); }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const initial = new URLSearchParams(window.location.search).get("search")?.trim() ?? "";
+    if (initial) setSearch(initial);
+    load(initial, 1, initSort);
+  }, [load]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onSearchChange = (value: string) => {
     setSearch(value); setPage(1);

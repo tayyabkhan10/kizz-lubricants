@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
+import { useSearchPalette } from "@/components/command-palette";
 import {
   LayoutGrid,
   Users,
@@ -14,6 +15,7 @@ import {
   Wallet,
   BarChart3,
   LogOut,
+  Search,
 } from "lucide-react";
 
 const NAV = [
@@ -51,6 +53,7 @@ export default function Sidebar() {
   const path = usePathname();
   const { data: session } = useSession();
   const userEmail = session?.user?.email ?? "";
+  const { open: openSearch } = useSearchPalette();
 
   const isActive = (href: string) =>
     href === "/dashboard" ? path === "/dashboard" : path.startsWith(href);
@@ -63,6 +66,18 @@ export default function Sidebar() {
           <Link href="/dashboard">
             <Brand />
           </Link>
+        </div>
+
+        {/* Search trigger */}
+        <div className="px-3 pt-3">
+          <button
+            onClick={openSearch}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border border-line-strong bg-surface/70 text-[13px] text-muted hover:text-ink hover:border-line-strong hover:bg-surface transition-colors"
+          >
+            <Search className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
+            <span className="flex-1 text-left">Search…</span>
+            <kbd className="text-[10.5px] font-medium text-faint border border-line-strong rounded px-1.5 py-0.5">⌘K</kbd>
+          </button>
         </div>
 
         {/* Nav */}
@@ -119,13 +134,22 @@ export default function Sidebar() {
         <Link href="/dashboard">
           <Brand />
         </Link>
-        <button
-          onClick={() => signOut({ callbackUrl: "/" })}
-          aria-label="Sign out"
-          className="w-9 h-9 flex items-center justify-center rounded-lg text-muted active:bg-black/[0.06]"
-        >
-          <LogOut className="w-[18px] h-[18px]" strokeWidth={2} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={openSearch}
+            aria-label="Search"
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-muted active:bg-black/[0.06]"
+          >
+            <Search className="w-[18px] h-[18px]" strokeWidth={2} />
+          </button>
+          <button
+            onClick={() => signOut({ callbackUrl: "/" })}
+            aria-label="Sign out"
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-muted active:bg-black/[0.06]"
+          >
+            <LogOut className="w-[18px] h-[18px]" strokeWidth={2} />
+          </button>
+        </div>
       </header>
 
       {/* ── Mobile bottom bar ─────────────────────────────────── */}

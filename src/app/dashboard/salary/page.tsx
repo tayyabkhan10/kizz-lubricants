@@ -119,6 +119,8 @@ export default function SalaryPage() {
   }, []);
 
   useEffect(() => {
+    const initial = new URLSearchParams(window.location.search).get("search")?.trim() ?? "";
+    if (initial) { setSearch(initial); setPage(1); load(initial, 1, "desc"); return; }
     const cached = salaryCache.get(keyFor("", "desc", 1));
     if (cached) { setRows(cached.rows); setTotal(cached.total); setCount(cached.count); setLoading(false); load("", 1, "desc", { silent: true }); }
     else load("", 1, "desc");

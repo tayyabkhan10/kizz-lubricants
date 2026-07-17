@@ -55,6 +55,8 @@ export default function PurchasingPage() {
   }, []);
 
   useEffect(() => {
+    const initial = new URLSearchParams(window.location.search).get("search")?.trim() ?? "";
+    if (initial) { setSearch(initial); setPage(1); load(initial, 1, initSort); return; }
     const cached = purchasingCache.get(keyFor("", initSort, 1));
     if (cached) {
       setRows(cached.rows); setTotal(cached.total); setCount(cached.count);
