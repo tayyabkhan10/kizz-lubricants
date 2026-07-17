@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { formatMoney, monthLabel } from "@/lib/utils";
 import { createLocalCache } from "@/lib/localCache";
 import { EmptyState, ErrorState } from "@/components/states";
+import { ProfitBars, TrendChart } from "@/components/charts";
 import { BarChart3 } from "lucide-react";
 
 type MonthRow = {
@@ -89,6 +90,33 @@ export default function PnlPage() {
             <div><p className="text-[11px] text-muted uppercase tracking-wider">Purchasing</p><p className="font-mono font-semibold text-ink mt-0.5 tabular-nums">{formatMoney(g.purchasing)}</p></div>
             <div><p className="text-[11px] text-muted uppercase tracking-wider">Expenses</p><p className="font-mono font-semibold text-ink mt-0.5 tabular-nums">{formatMoney(g.expenses)}</p></div>
             <div><p className="text-[11px] text-muted uppercase tracking-wider">Salary</p><p className="font-mono font-semibold text-ink mt-0.5 tabular-nums">{formatMoney(g.salary)}</p></div>
+          </div>
+        </div>
+      )}
+
+      {/* Charts — profit/loss per month + sales momentum */}
+      {data && data.rows.length > 1 && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+          <div className="card overflow-hidden">
+            <div className="px-5 sm:px-6 py-4 border-b border-line">
+              <h2 className="text-[15px] font-semibold text-ink">Monthly profit / loss</h2>
+              <p className="mt-0.5 text-[12.5px] text-muted">
+                <span className="text-success font-medium">Green</span> = profit,{" "}
+                <span className="text-danger font-medium">red</span> = loss, each month.
+              </p>
+            </div>
+            <div className="p-3 sm:p-4">
+              <ProfitBars data={data.rows.map((r) => ({ label: monthLabel(r.month), value: r.profit }))} />
+            </div>
+          </div>
+          <div className="card overflow-hidden">
+            <div className="px-5 sm:px-6 py-4 border-b border-line">
+              <h2 className="text-[15px] font-semibold text-ink">Sales trend</h2>
+              <p className="mt-0.5 text-[12.5px] text-muted">Total sales billed each month.</p>
+            </div>
+            <div className="p-3 sm:p-4">
+              <TrendChart data={data.rows.map((r) => ({ label: monthLabel(r.month), value: r.sales }))} />
+            </div>
           </div>
         </div>
       )}

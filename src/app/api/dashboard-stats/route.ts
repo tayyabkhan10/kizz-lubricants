@@ -22,6 +22,7 @@ export async function GET() {
     [{ customerCount }],
     outstandingRes,
     balancesRes,
+    monthlyRes,
   ] = await Promise.all([
     db.select({ totalSales: sql<string>`COALESCE(SUM(amount),0)` }).from(sales),
     db.select({ totalPurch: sql<string>`COALESCE(SUM(amount),0)` }).from(purchasing),
@@ -43,6 +44,10 @@ export async function GET() {
       ORDER BY ABS(COALESCE((SELECT balance FROM customer_entries ce WHERE ce.customer_id = c.id ORDER BY date DESC, id DESC LIMIT 1),0)) DESC NULLS LAST
       LIMIT 10
     `),
+    db.execute(sql`
+      SELECT TO_CHAR(date, 'YYYY-MM') AS month, COALESCE(SUM(amount), 0) AS total
+      FROM sales GROUP BY 1 ORDER BY 1
+    `),
   ]);
 
   const outstanding = Number((outstandingRes.rows[0] as Record<string, string>).total_outstanding ?? 0);
@@ -57,6 +62,7 @@ export async function GET() {
       custCount: Number(customerCount),
     },
     topBalances: balancesRes.rows,
+    monthlySales: monthlyRes.rows,
   });
   } catch (err) {
     console.error("GET /dashboard-stats failed:", err);

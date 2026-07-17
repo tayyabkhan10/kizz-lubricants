@@ -17,6 +17,7 @@ export type DashboardData = {
     phone: string | null;
     balance: string | null;
   }[];
+  monthlySales: { month: string; total: string }[];
 };
 
 // Shared instance so the login-page prefetch and the dashboard read/write the

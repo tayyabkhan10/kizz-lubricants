@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { formatMoney, toNum } from "@/lib/utils";
+import { formatMoney, toNum, monthLabel } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Receipt, Wallet, Users, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { EmptyState, ErrorState } from "@/components/states";
+import { TrendChart } from "@/components/charts";
 import { dashboardCache, DASH_KEY, type DashboardData } from "@/lib/dashboard-cache";
 
 /** Plain-language meaning of a customer balance (mixed audience: term + explanation). */
@@ -47,6 +48,7 @@ export default function DashboardPage() {
   if (!data) return null;
 
   const { stats, topBalances } = data;
+  const revenueTrend = (data.monthlySales ?? []).map((m) => ({ label: monthLabel(m.month), value: toNum(m.total) }));
   const costTotal = stats.totalPurchasing + stats.totalExpenses + stats.totalSalary;
   const profit = stats.totalSales - costTotal;
   const margin = stats.totalSales > 0 ? (profit / stats.totalSales) * 100 : 0;
@@ -178,6 +180,19 @@ export default function DashboardPage() {
           );
         })}
       </div>
+
+      {/* ── Revenue trend ──────────────────────────────────── */}
+      {revenueTrend.length > 1 && (
+        <div className="rise rise-3 card overflow-hidden">
+          <div className="px-5 sm:px-6 py-4 border-b border-line">
+            <h2 className="text-[15px] font-semibold text-ink">Revenue trend</h2>
+            <p className="mt-0.5 text-[12.5px] text-muted">Monthly sales — your money coming in over time.</p>
+          </div>
+          <div className="p-3 sm:p-4">
+            <TrendChart data={revenueTrend} />
+          </div>
+        </div>
+      )}
 
       {/* ── Customer balances ──────────────────────────────── */}
       <div className="rise rise-3 card overflow-hidden">
