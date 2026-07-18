@@ -1,3 +1,5 @@
+
+
 import {
   pgTable,
   serial,
@@ -34,11 +36,7 @@ export const customers = pgTable("customers", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// ─── Customer Ledger Entries ──────────────────────────────────
-// Debit  = goods billed to the customer (increases what they owe us)
-// Credit = payment received from the customer (reduces what they owe)
-// Running balance, oldest → newest: balance[n] = balance[n-1] + debit − credit
-//   (see recalcBalances in src/lib/ledger.ts — that code is authoritative)
+
 export const customerEntries = pgTable("customer_entries", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id")
@@ -55,6 +53,11 @@ export const customerEntries = pgTable("customer_entries", {
   // Running balance: positive = customer owes us | negative = we owe customer (advance)
   balance: numeric("balance", { precision: 14, scale: 2 }).notNull().default("0"),
   account: varchar("account", { length: 300 }),
+  // Set on the debit row that mirrors a sale. If the sale is deleted, this
+  // row is deleted automatically (and vice versa, see entries/[entryId] route).
+  saleId: integer("sale_id").references((): any => sales.id, { onDelete: "cascade" }),
+  // Set on the credit row that mirrors a sale payment/installment.
+  salePaymentId: integer("sale_payment_id").references((): any => salePayments.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => [
   // Serves the DISTINCT ON (customer_id) … ORDER BY date DESC, id DESC balance
@@ -67,6 +70,9 @@ export const sales = pgTable("sales", {
   id: serial("id").primaryKey(),
   date: date("date").notNull(),
   detail: varchar("detail", { length: 400 }).notNull(),
+  product: varchar("product", { length: 200 }),
+  packing: varchar("packing", { length: 100 }),
+  unit: varchar("unit", { length: 50 }),
   qty: numeric("qty", { precision: 12, scale: 3 }),
   rate: numeric("rate", { precision: 14, scale: 2 }),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
@@ -79,6 +85,22 @@ export const sales = pgTable("sales", {
 }, (t) => [
   index("sales_date_idx").on(t.date.desc(), t.id.desc()),
   index("sales_customer_idx").on(t.customerId),
+]);
+
+// ─── Sale Payments ─────────────────────────────────────────────
+// Partial / installment payments recorded against a sale, each with its own
+// date and amount. Every payment mirrors into the customer's ledger as a
+// credit row on that same date (see customerEntries.salePaymentId above).
+// A sale's outstanding balance = sales.amount − Σ salePayments.amount.
+export const salePayments = pgTable("sale_payments", {
+  id: serial("id").primaryKey(),
+  saleId: integer("sale_id").notNull().references(() => sales.id, { onDelete: "cascade" }),
+  ledgerEntryId: integer("ledger_entry_id").references(() => customerEntries.id, { onDelete: "set null" }),
+  date: date("date").notNull(),
+  amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("sale_payments_sale_idx").on(t.saleId, t.date.desc(), t.id.desc()),
 ]);
 
 // ─── Purchasing ───────────────────────────────────────────────
@@ -196,6 +218,7 @@ export type User = typeof users.$inferSelect;
 export type Customer = typeof customers.$inferSelect;
 export type CustomerEntry = typeof customerEntries.$inferSelect;
 export type Sale = typeof sales.$inferSelect;
+export type SalePayment = typeof salePayments.$inferSelect;
 export type Purchase = typeof purchasing.$inferSelect;
 export type Expense = typeof expenses.$inferSelect;
 export type SalaryPayment = typeof salary.$inferSelect;
